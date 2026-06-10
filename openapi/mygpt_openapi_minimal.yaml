@@ -1,0 +1,1389 @@
+openapi: 3.1.0
+info:
+  title: Biwenger Mundial 2026 Actions API
+  description: API privada de administración del optimizador Biwenger Mundial 2026.
+    Requiere la clave API de administrador en X-API-Key y un user_id estable en cada
+    ruta. user_id separa configuración, ratings y plantilla local, pero no autentica
+    por sí solo. Las acciones de plantilla son simulaciones locales y requieren el
+    confirmation_token devuelto por la API. No existe acceso a credenciales ni a la
+    cuenta real de Biwenger.
+  version: 0.2.0
+paths:
+  /api/users/{user_id}/status:
+    get:
+      summary: Status Route
+      operationId: getStatus
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/rules:
+    get:
+      summary: Rules
+      description: Return configurable example rules for this private league, not
+        official Biwenger rules.
+      operationId: getRules
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/settings:
+    get:
+      summary: Get Settings
+      description: Retrieve the current active budget and starting lineup formation
+        settings.
+      operationId: getSettings
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      summary: Update Settings
+      description: Update settings (e.g. budget limit, starting lineup formation)
+        dynamically.
+      operationId: updateSettings
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettingsUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/sync:
+    post:
+      summary: Sync Database
+      description: Trigger synchronization between the local database and the Biwenger
+        API.
+      operationId: syncPublicData
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: Sync Database Via Get
+      description: Compatibility alias for clients that call sync via GET.
+      operationId: syncPublicDataViaGet
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/players:
+    get:
+      summary: Get Players
+      description: Fetch players with optional query filters, sorting, and pagination.
+      operationId: listPlayers
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      - name: position
+        in: query
+        required: false
+        schema:
+          description: 'Filter by position: GK, DEF, MID, FWD'
+          title: Position
+          type: string
+          enum:
+          - GK
+          - DEF
+          - MID
+          - FWD
+        description: 'Filter by position: GK, DEF, MID, FWD'
+        style: form
+        explode: true
+      - name: team
+        in: query
+        required: false
+        schema:
+          description: Filter by country/national team name
+          title: Team
+          type: string
+        description: Filter by country/national team name
+        style: form
+        explode: true
+      - name: status
+        in: query
+        required: false
+        schema:
+          description: 'Filter by availability status: ok, doubtful, injured'
+          title: Status
+          type: string
+          enum:
+          - ok
+          - doubtful
+          - injured
+          - suspended
+          - no_disponible
+        description: 'Filter by availability status: ok, doubtful, injured'
+        style: form
+        explode: true
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type: string
+          description: 'Sort by: fixed_price, points, market_value, goals, assists'
+          default: fixed_price
+          title: Sort By
+          enum:
+          - fixed_price
+          - points
+          - market_value
+          - goals
+          - assists
+          - name
+          - team
+        description: 'Sort by: fixed_price, points, market_value, goals, assists'
+        style: form
+        explode: true
+      - name: active_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Filter to show only players whose national teams are still
+            active in the tournament
+          default: true
+          title: Active Only
+        description: Filter to show only players whose national teams are still active
+          in the tournament
+        style: form
+        explode: true
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 100
+          title: Limit
+        style: form
+        explode: true
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+        style: form
+        explode: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/player/{player_id}:
+    get:
+      summary: Get Player
+      description: Retrieve detailed stats for a specific player by ID.
+      operationId: getPlayer
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      - name: player_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Player Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/matches:
+    get:
+      summary: Get Matches
+      description: Fetch all match fixtures with optional round name or match status
+        filtering.
+      operationId: listMatches
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      - name: round_name
+        in: query
+        required: false
+        schema:
+          description: Filter by round name, e.g. 'Fase de Grupos, ronda 1'
+          title: Round Name
+          type: string
+        description: Filter by round name, e.g. 'Fase de Grupos, ronda 1'
+        style: form
+        explode: true
+      - name: status
+        in: query
+        required: false
+        schema:
+          description: 'Filter by status: pending, preview, finished'
+          title: Status
+          type: string
+          enum:
+          - pending
+          - preview
+          - finished
+        description: 'Filter by status: pending, preview, finished'
+        style: form
+        explode: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/standings:
+    get:
+      summary: Get Standings
+      description: Retrieve group stage standings.
+      operationId: getStandings
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/leagues:
+    get:
+      summary: Get Leagues
+      description: Retrieve active leagues.
+      operationId: listLeagues
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/team:
+    get:
+      summary: Get Team
+      description: Retrieve the user's squad/roster stored in the SQLite database.
+      operationId: getAccountTeamAvailability
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/market:
+    get:
+      summary: Get Market
+      description: Retrieve the shared fixed-price catalogue, not a user's private
+        live market.
+      operationId: getFixedPriceCatalog
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/player/{player_id}/rating:
+    post:
+      summary: Update Player Rating
+      description: Set or update the manual_rating for a player.
+      operationId: setPlayerRating
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      - name: player_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Player Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerRatingUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/compare-players:
+    post:
+      summary: Compare Players
+      description: Compare performance metrics of multiple players.
+      operationId: comparePlayers
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComparePlayersRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/build-phase-plan:
+    post:
+      summary: Build Phase Plan
+      description: Build a roster planning guide from the configured fixed-price example
+        rules.
+      operationId: buildPhasePlan
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildPhasePlanRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/optimize-lineup:
+    post:
+      summary: Optimize
+      description: Optimize 11 starters and 0-4 substitutes under the user's settings.
+      operationId: optimizeLineup
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/pick-captain:
+    post:
+      summary: Pick Captain
+      description: Analyze and rank top candidates to select the best captain.
+      operationId: pickCaptain
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/pick-ariete:
+    post:
+      summary: Pick Ariete
+      description: Analyze and rank top candidates to select the best ariete.
+      operationId: pickAriete
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/suggest-alternatives:
+    post:
+      summary: Suggest Alternatives
+      description: Suggest better or more cost-effective alternative players in the
+        same position.
+      operationId: suggestAlternatives
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuggestAlternativesRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/actions/set-lineup:
+    post:
+      summary: Set Lineup
+      operationId: simulateSetLineup
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetLineupActionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/actions/make-bid:
+    post:
+      summary: Make Bid
+      operationId: simulateMakeBid
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MakeBidActionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/actions/cancel-bid:
+    post:
+      summary: Cancel Bid
+      operationId: simulateCancelBid
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerActionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/actions/sell-player:
+    post:
+      summary: Sell Player
+      operationId: simulateSellPlayer
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerActionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/actions/accept-offer:
+    post:
+      summary: Accept Offer
+      operationId: simulateAcceptOffer
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptOfferActionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AcceptOfferActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/AcceptOfferPayload'
+      type: object
+      required:
+      - payload
+      title: AcceptOfferActionRequest
+    AcceptOfferPayload:
+      properties:
+        offer_id:
+          type: string
+          title: Offer Id
+      type: object
+      required:
+      - offer_id
+      title: AcceptOfferPayload
+    ApiResponse:
+      properties:
+        ok:
+          type: boolean
+          title: Ok
+        data:
+          title: Data
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        needs_review:
+          type: boolean
+          title: Needs Review
+          default: false
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+      type: object
+      required:
+      - ok
+      title: ApiResponse
+    BuildPhasePlanRequest:
+      properties:
+        phase:
+          type: string
+          enum:
+          - groups
+          - round_of_16
+          - quarter_finals
+          - semi_finals
+          - final
+          title: Phase
+          default: groups
+        target_budget:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Budget
+          description: Optional target budget to plan towards
+      type: object
+      title: BuildPhasePlanRequest
+    ComparePlayersRequest:
+      properties:
+        player_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 5
+          minItems: 2
+          title: Player Ids
+          description: List of 2 to 5 player IDs to compare
+      type: object
+      required:
+      - player_ids
+      title: ComparePlayersRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    MakeBidActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/MakeBidPayload'
+      type: object
+      required:
+      - payload
+      title: MakeBidActionRequest
+    MakeBidPayload:
+      properties:
+        player_id:
+          type: string
+          title: Player Id
+        amount:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Amount
+          description: Bid amount in absolute euros
+      type: object
+      required:
+      - player_id
+      - amount
+      title: MakeBidPayload
+    OptimizeRequest:
+      properties:
+        phase:
+          type: string
+          enum:
+          - groups
+          - round_of_16
+          - quarter_finals
+          - semi_finals
+          - final
+          title: Phase
+          default: groups
+        matchday:
+          type: integer
+          title: Matchday
+          default: 1
+        risk_profile:
+          type: string
+          enum:
+          - conservative
+          - balanced
+          - aggressive
+          title: Risk Profile
+          default: balanced
+        objective:
+          type: string
+          enum:
+          - points
+          - value
+          - points_and_value
+          title: Objective
+          default: points_and_value
+        custom_ratings:
+          anyOf:
+          - additionalProperties:
+              type: number
+            type: object
+          - type: 'null'
+          title: Custom Ratings
+        base_players:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Base Players
+          description: Optional list of player IDs that must be included in the optimized
+            lineup
+      type: object
+      title: OptimizeRequest
+    PlayerActionPayload:
+      properties:
+        player_id:
+          type: string
+          title: Player Id
+      type: object
+      required:
+      - player_id
+      title: PlayerActionPayload
+    PlayerActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/PlayerActionPayload'
+      type: object
+      required:
+      - payload
+      title: PlayerActionRequest
+    PlayerRatingUpdateRequest:
+      properties:
+        manual_rating:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Manual Rating
+          description: Custom rating value (or null to clear)
+      type: object
+      title: PlayerRatingUpdateRequest
+    PublicOptimizeRequest:
+      properties:
+        phase:
+          type: string
+          enum:
+          - groups
+          - round_of_16
+          - quarter_finals
+          - semi_finals
+          - final
+          title: Phase
+          default: groups
+        matchday:
+          type: integer
+          title: Matchday
+          default: 1
+        risk_profile:
+          type: string
+          enum:
+          - conservative
+          - balanced
+          - aggressive
+          title: Risk Profile
+          default: balanced
+        objective:
+          type: string
+          enum:
+          - points
+          - value
+          - points_and_value
+          title: Objective
+          default: points_and_value
+        custom_ratings:
+          anyOf:
+          - additionalProperties:
+              type: number
+            type: object
+          - type: 'null'
+          title: Custom Ratings
+        base_players:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Base Players
+          description: Optional list of player IDs that must be included in the optimized
+            lineup
+        budget:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Budget
+          description: Available budget in Millions (e.g. 920.0). Defaults to phase
+            rules.
+        formation:
+          type: string
+          enum:
+          - 3-4-3
+          - 3-5-2
+          - 4-3-3
+          - 4-4-2
+          - 4-5-1
+          - 5-3-2
+          - 5-4-1
+          title: Formation
+          default: 3-5-2
+        max_players_same_team:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Players Same Team
+          description: Max players from same country. Defaults to phase rules.
+        squad_size:
+          type: integer
+          maximum: 15.0
+          minimum: 11.0
+          title: Squad Size
+          description: Squad size (11 to 15)
+          default: 11
+      type: object
+      title: PublicOptimizeRequest
+    SetLineupActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/SetLineupPayload'
+      type: object
+      required:
+      - payload
+      title: SetLineupActionRequest
+    SetLineupPayload:
+      properties:
+        players:
+          items:
+            type: string
+          type: array
+          maxItems: 15
+          minItems: 11
+          title: Players
+          description: Ordered player IDs in the proposed squad
+        captain_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Captain Id
+          description: Optional captain player ID
+        ariete_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ariete Id
+          description: Optional ariete player ID
+      type: object
+      required:
+      - players
+      title: SetLineupPayload
+    SettingsUpdateRequest:
+      properties:
+        total_budget:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Total Budget
+          description: Update total budget in millions (e.g. 920.0)
+        active_formation:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active Formation
+          description: Update formation (e.g. 3-5-2)
+        max_players_same_team:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Players Same Team
+          description: Update maximum players from same country
+        squad_size:
+          anyOf:
+          - type: integer
+            maximum: 15.0
+            minimum: 11.0
+          - type: 'null'
+          title: Squad Size
+          description: Choose any squad size from 11 to 15
+      type: object
+      title: SettingsUpdateRequest
+    SuggestAlternativesRequest:
+      properties:
+        player_id:
+          type: string
+          title: Player Id
+          description: ID of the player to find alternatives for
+        max_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Price
+          description: Optional maximum price limit in Millions (defaults to player
+            price + 3.0M)
+        objective:
+          type: string
+          enum:
+          - points
+          - value
+          - points_and_value
+          title: Objective
+          default: points_and_value
+      type: object
+      required:
+      - player_id
+      title: SuggestAlternativesRequest
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    APIKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+servers:
+- url: https://biwenger-mcp.cestmail.com

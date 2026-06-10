@@ -1,0 +1,33 @@
+tunnel: n8n-tunel
+credentials-file: /etc/cloudflared/98884f2a-42a8-49e5-b1e7-d97edca64f02.json
+
+ingress:
+  - hostname: n8n-migrai.cestmail.com
+    service: http://localhost:5678
+  - hostname: tr-mcp.cestmail.com
+    path: ^/docs$
+    service: http_status:404
+  - hostname: tr-mcp.cestmail.com
+    path: ^/redoc$
+    service: http_status:404
+  - hostname: tr-mcp.cestmail.com
+    path: ^/openapi\.json$
+    service: http_status:404
+  - hostname: tr-mcp.cestmail.com
+    service: http://localhost:8766
+  - hostname: biwenger-mcp.cestmail.com
+    path: ^/docs$
+    service: http_status:404
+  - hostname: biwenger-mcp.cestmail.com
+    path: ^/redoc$
+    service: http_status:404
+  - hostname: biwenger-mcp.cestmail.com
+    path: ^/openapi\.json$
+    service: http_status:404
+  - hostname: biwenger-mcp.cestmail.com
+    service: http://localhost:8767
+  - hostname: dockge.cestmail.com
+    service: http://localhost:5001
+  - hostname: status.cestmail.com
+    service: http://localhost:3001
+  - service: http_status:404

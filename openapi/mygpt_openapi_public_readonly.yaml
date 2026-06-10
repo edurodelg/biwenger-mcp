@@ -1,0 +1,832 @@
+openapi: 3.1.0
+info:
+  title: Biwenger Mundial 2026 Public API (Read-Only)
+  description: API pública de precios fijos para consultar y calcular sobre el catálogo
+    del Mundial 2026. Las operaciones no modifican datos y requieren X-API-Key.
+  version: 0.2.0
+paths:
+  /api/status:
+    get:
+      summary: Public Status Route
+      description: Get the status of the API service without user isolation.
+      operationId: getPublicStatus
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+      security:
+      - APIKeyHeader: []
+  /api/rules:
+    get:
+      summary: Public Rules
+      description: Retrieve the configurable private-league example rules without
+        user context.
+      operationId: getPublicRules
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+      security:
+      - APIKeyHeader: []
+  /api/players:
+    get:
+      summary: Get Public Players
+      description: Fetch players with optional query filters, sorting, and pagination
+        (public catalog).
+      operationId: listPublicPlayers
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: position
+        in: query
+        required: false
+        schema:
+          description: 'Filter by position: GK, DEF, MID, FWD'
+          title: Position
+          type: string
+          enum:
+          - GK
+          - DEF
+          - MID
+          - FWD
+        description: 'Filter by position: GK, DEF, MID, FWD'
+        style: form
+        explode: true
+      - name: team
+        in: query
+        required: false
+        schema:
+          description: Filter by country/national team name
+          title: Team
+          type: string
+        description: Filter by country/national team name
+        style: form
+        explode: true
+      - name: status
+        in: query
+        required: false
+        schema:
+          description: 'Filter by availability status: ok, doubtful, injured'
+          title: Status
+          type: string
+          enum:
+          - ok
+          - doubtful
+          - injured
+          - suspended
+          - no_disponible
+        description: 'Filter by availability status: ok, doubtful, injured'
+        style: form
+        explode: true
+      - name: sort_by
+        in: query
+        required: false
+        schema:
+          type: string
+          description: 'Sort by: fixed_price, points, market_value, goals, assists'
+          default: fixed_price
+          title: Sort By
+          enum:
+          - fixed_price
+          - points
+          - market_value
+          - goals
+          - assists
+          - name
+          - team
+        description: 'Sort by: fixed_price, points, market_value, goals, assists'
+        style: form
+        explode: true
+      - name: active_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Filter to show only players whose national teams are still
+            active in the tournament
+          default: true
+          title: Active Only
+        description: Filter to show only players whose national teams are still active
+          in the tournament
+        style: form
+        explode: true
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 100
+          title: Limit
+        style: form
+        explode: true
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+        style: form
+        explode: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/player/{player_id}:
+    get:
+      summary: Get Public Player
+      description: Retrieve detailed stats for a specific player by ID (public catalog).
+      operationId: getPublicPlayer
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: player_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Player Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/matches:
+    get:
+      summary: Get Public Matches
+      description: Fetch all match fixtures with optional round name or match status
+        filtering.
+      operationId: listPublicMatches
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: round_name
+        in: query
+        required: false
+        schema:
+          description: Filter by round name, e.g. 'Fase de Grupos, ronda 1'
+          title: Round Name
+          type: string
+        description: Filter by round name, e.g. 'Fase de Grupos, ronda 1'
+        style: form
+        explode: true
+      - name: status
+        in: query
+        required: false
+        schema:
+          description: 'Filter by status: pending, preview, finished'
+          title: Status
+          type: string
+          enum:
+          - pending
+          - preview
+          - finished
+        description: 'Filter by status: pending, preview, finished'
+        style: form
+        explode: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/standings:
+    get:
+      summary: Get Public Standings
+      description: Retrieve group stage standings.
+      operationId: getPublicStandings
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+      security:
+      - APIKeyHeader: []
+  /api/leagues:
+    get:
+      summary: Get Public Leagues
+      description: Retrieve active leagues.
+      operationId: listPublicLeagues
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+      security:
+      - APIKeyHeader: []
+  /api/optimize-lineup:
+    post:
+      summary: Public Optimize
+      description: Optimize 11 starters and 0-4 substitutes with custom budget/formation/squad
+        size parameters without saving/loading user settings (stateless).
+      operationId: optimizePublicLineup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicOptimizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - APIKeyHeader: []
+  /api/suggest-alternatives:
+    post:
+      summary: Public Suggest Alternatives
+      description: Suggest better or more cost-effective alternative players in the
+        same position (stateless).
+      operationId: suggestPublicAlternatives
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuggestAlternativesRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - APIKeyHeader: []
+  /api/pick-captain:
+    post:
+      summary: Public Pick Captain
+      description: Analyze and rank top candidates to select the best captain (stateless).
+      operationId: pickPublicCaptain
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - APIKeyHeader: []
+  /api/pick-ariete:
+    post:
+      summary: Public Pick Ariete
+      description: Analyze and rank top candidates to select the best ariete (stateless).
+      operationId: pickPublicAriete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - APIKeyHeader: []
+  /api/compare-players:
+    post:
+      summary: Public Compare Players
+      description: Compare performance metrics of multiple players (stateless).
+      operationId: comparePublicPlayers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComparePlayersRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - APIKeyHeader: []
+  /api/build-phase-plan:
+    post:
+      summary: Public Build Phase Plan
+      description: Build a roster planning guide from the configured fixed-price example
+        rules (stateless).
+      operationId: buildPublicPhasePlan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildPhasePlanRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - APIKeyHeader: []
+components:
+  schemas:
+    AcceptOfferActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/AcceptOfferPayload'
+      type: object
+      required:
+      - payload
+      title: AcceptOfferActionRequest
+    AcceptOfferPayload:
+      properties:
+        offer_id:
+          type: string
+          title: Offer Id
+      type: object
+      required:
+      - offer_id
+      title: AcceptOfferPayload
+    ApiResponse:
+      properties:
+        ok:
+          type: boolean
+          title: Ok
+        data:
+          title: Data
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        needs_review:
+          type: boolean
+          title: Needs Review
+          default: false
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+        details:
+          additionalProperties: true
+          type: object
+          title: Details
+      type: object
+      required:
+      - ok
+      title: ApiResponse
+    BuildPhasePlanRequest:
+      properties:
+        phase:
+          type: string
+          enum:
+          - groups
+          - round_of_16
+          - quarter_finals
+          - semi_finals
+          - final
+          title: Phase
+          default: groups
+        target_budget:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Budget
+          description: Optional target budget to plan towards
+      type: object
+      title: BuildPhasePlanRequest
+    ComparePlayersRequest:
+      properties:
+        player_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 5
+          minItems: 2
+          title: Player Ids
+          description: List of 2 to 5 player IDs to compare
+      type: object
+      required:
+      - player_ids
+      title: ComparePlayersRequest
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    MakeBidActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/MakeBidPayload'
+      type: object
+      required:
+      - payload
+      title: MakeBidActionRequest
+    MakeBidPayload:
+      properties:
+        player_id:
+          type: string
+          title: Player Id
+        amount:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Amount
+          description: Bid amount in absolute euros
+      type: object
+      required:
+      - player_id
+      - amount
+      title: MakeBidPayload
+    OptimizeRequest:
+      properties:
+        phase:
+          type: string
+          enum:
+          - groups
+          - round_of_16
+          - quarter_finals
+          - semi_finals
+          - final
+          title: Phase
+          default: groups
+        matchday:
+          type: integer
+          title: Matchday
+          default: 1
+        risk_profile:
+          type: string
+          enum:
+          - conservative
+          - balanced
+          - aggressive
+          title: Risk Profile
+          default: balanced
+        objective:
+          type: string
+          enum:
+          - points
+          - value
+          - points_and_value
+          title: Objective
+          default: points_and_value
+        custom_ratings:
+          anyOf:
+          - additionalProperties:
+              type: number
+            type: object
+          - type: 'null'
+          title: Custom Ratings
+        base_players:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Base Players
+          description: Optional list of player IDs that must be included in the optimized
+            lineup
+      type: object
+      title: OptimizeRequest
+    PlayerActionPayload:
+      properties:
+        player_id:
+          type: string
+          title: Player Id
+      type: object
+      required:
+      - player_id
+      title: PlayerActionPayload
+    PlayerActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/PlayerActionPayload'
+      type: object
+      required:
+      - payload
+      title: PlayerActionRequest
+    PlayerRatingUpdateRequest:
+      properties:
+        manual_rating:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Manual Rating
+          description: Custom rating value (or null to clear)
+      type: object
+      title: PlayerRatingUpdateRequest
+    PublicOptimizeRequest:
+      properties:
+        phase:
+          type: string
+          enum:
+          - groups
+          - round_of_16
+          - quarter_finals
+          - semi_finals
+          - final
+          title: Phase
+          default: groups
+        matchday:
+          type: integer
+          title: Matchday
+          default: 1
+        risk_profile:
+          type: string
+          enum:
+          - conservative
+          - balanced
+          - aggressive
+          title: Risk Profile
+          default: balanced
+        objective:
+          type: string
+          enum:
+          - points
+          - value
+          - points_and_value
+          title: Objective
+          default: points_and_value
+        custom_ratings:
+          anyOf:
+          - additionalProperties:
+              type: number
+            type: object
+          - type: 'null'
+          title: Custom Ratings
+        base_players:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Base Players
+          description: Optional list of player IDs that must be included in the optimized
+            lineup
+        budget:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Budget
+          description: Available budget in Millions (e.g. 920.0). Defaults to phase
+            rules.
+        formation:
+          type: string
+          enum:
+          - 3-4-3
+          - 3-5-2
+          - 4-3-3
+          - 4-4-2
+          - 4-5-1
+          - 5-3-2
+          - 5-4-1
+          title: Formation
+          default: 3-5-2
+        max_players_same_team:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Players Same Team
+          description: Max players from same country. Defaults to phase rules.
+        squad_size:
+          type: integer
+          maximum: 15.0
+          minimum: 11.0
+          title: Squad Size
+          description: Squad size (11 to 15)
+          default: 11
+      type: object
+      title: PublicOptimizeRequest
+    SetLineupActionRequest:
+      properties:
+        confirmation_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmation Token
+        payload:
+          $ref: '#/components/schemas/SetLineupPayload'
+      type: object
+      required:
+      - payload
+      title: SetLineupActionRequest
+    SetLineupPayload:
+      properties:
+        players:
+          items:
+            type: string
+          type: array
+          maxItems: 15
+          minItems: 11
+          title: Players
+          description: Ordered player IDs in the proposed squad
+        captain_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Captain Id
+          description: Optional captain player ID
+        ariete_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ariete Id
+          description: Optional ariete player ID
+      type: object
+      required:
+      - players
+      title: SetLineupPayload
+    SettingsUpdateRequest:
+      properties:
+        total_budget:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Total Budget
+          description: Update total budget in millions (e.g. 920.0)
+        active_formation:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active Formation
+          description: Update formation (e.g. 3-5-2)
+        max_players_same_team:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Players Same Team
+          description: Update maximum players from same country
+        squad_size:
+          anyOf:
+          - type: integer
+            maximum: 15.0
+            minimum: 11.0
+          - type: 'null'
+          title: Squad Size
+          description: Choose any squad size from 11 to 15
+      type: object
+      title: SettingsUpdateRequest
+    SuggestAlternativesRequest:
+      properties:
+        player_id:
+          type: string
+          title: Player Id
+          description: ID of the player to find alternatives for
+        max_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Price
+          description: Optional maximum price limit in Millions (defaults to player
+            price + 3.0M)
+        objective:
+          type: string
+          enum:
+          - points
+          - value
+          - points_and_value
+          title: Objective
+          default: points_and_value
+      type: object
+      required:
+      - player_id
+      title: SuggestAlternativesRequest
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    APIKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+servers:
+- url: https://biwenger-mcp.cestmail.com

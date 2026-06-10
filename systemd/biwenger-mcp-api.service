@@ -1,0 +1,23 @@
+[Unit]
+Description=Biwenger MCP REST API for MyGPT Actions
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/dev/raspberry-admin/apps/biwenger-mcp
+EnvironmentFile=/home/admin/dev/raspberry-admin/apps/biwenger-mcp/.env
+Environment=PATH=/home/admin/dev/raspberry-admin/apps/biwenger-mcp/.venv/bin:/home/admin/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/admin/dev/raspberry-admin/apps/biwenger-mcp/.venv/bin/python main.py --host 127.0.0.1 --port 8767
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/admin/dev/raspberry-admin/apps/biwenger-mcp/data
+
+[Install]
+WantedBy=multi-user.target

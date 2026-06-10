@@ -1,0 +1,5 @@
+id,name,position,team,fixed_price,points,status
+example-gk,Portero Ejemplo,GK,Seleccion A,5.5,0,ok
+example-def,Defensa Ejemplo,DEF,Seleccion B,7.0,0,ok
+example-mid,Medio Ejemplo,MID,Seleccion C,9.5,0,ok
+example-fwd,Delantero Ejemplo,FWD,Seleccion D,11.0,0,ok

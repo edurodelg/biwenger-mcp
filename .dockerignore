@@ -1,0 +1,13 @@
+.git
+.venv
+.env
+config.json
+config.yaml
+data
+__pycache__
+*.pyc
+.pytest_cache
+tests
+openapi
+deploy
+systemd
