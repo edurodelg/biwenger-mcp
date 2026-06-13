@@ -76,7 +76,7 @@ def test_mygpt_contract_is_exact_export_of_fastapi():
             assert user_parameter["schema"]["maxLength"] == 64
 
     assert len(operation_ids) == len(set(operation_ids))
-    assert len(operation_ids) == 25
+    assert len(operation_ids) == 27
 
     matches_parameters = {
         parameter["name"]: parameter
@@ -96,6 +96,8 @@ def test_public_contract_has_all_stateless_operations_and_stable_query_parameter
         ("GET", "/api/status"),
         ("GET", "/api/rules"),
         ("GET", "/api/players"),
+        ("GET", "/api/selections"),
+        ("GET", "/api/scoring-systems"),
         ("GET", "/api/player/{player_id}"),
         ("GET", "/api/matches"),
         ("GET", "/api/standings"),
@@ -114,6 +116,9 @@ def test_public_contract_has_all_stateless_operations_and_stable_query_parameter
     }
     assert players_parameters["position"]["schema"]["enum"] == ["GK", "DEF", "MID", "FWD"]
     assert players_parameters["status"]["schema"]["enum"][:3] == ["ok", "doubtful", "injured"]
+    assert players_parameters["score_system"]["schema"]["enum"] == [
+        "diario_as", "sofascore", "average", "statistics"
+    ]
     assert "anyOf" not in players_parameters["team"]["schema"]
 
     matches_parameters = {
@@ -167,6 +172,8 @@ async def test_every_mygpt_operation_accepts_a_representative_request(monkeypatc
         ("POST", f"{USER_PATH}/sync", None, None),
         ("GET", f"{USER_PATH}/sync", None, None),
         ("GET", f"{USER_PATH}/players", None, {"position": "MID", "limit": 10}),
+        ("GET", f"{USER_PATH}/selections", None, None),
+        ("GET", f"{USER_PATH}/scoring-systems", None, None),
         ("GET", f"{USER_PATH}/player/1-GK", None, None),
         ("GET", f"{USER_PATH}/matches", None, {"status": "pending"}),
         ("GET", f"{USER_PATH}/standings", None, None),

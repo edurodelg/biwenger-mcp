@@ -1,11 +1,13 @@
 import httpx
+import asyncio
 import logging
 from collections import Counter
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 from .config import settings
 from .database import (
     init_db, get_db_setting, set_db_setting, get_user_setting, set_user_setting,
-    save_players_to_db, get_players_from_db,
+    save_players_to_db, get_players_from_db, get_selections_from_db,
     save_matches_to_db, get_matches_from_db,
     save_standings_to_db, get_standings_from_db,
     save_player_reports_to_db, get_player_reports_from_db,
@@ -15,6 +17,7 @@ from .database import (
 )
 from .pricing import fixed_price_from_record, normalize_price_millions
 from .rules import get_example_ruleset
+from .scoring import DEFAULT_SCORING_SYSTEM, SCORING_SYSTEMS, scoring_system_catalog
 
 
 logger = logging.getLogger("Core")
@@ -127,6 +130,7 @@ class BiwengerCore:
             "active_budget": cfg["total_budget"],
             "active_formation": cfg["active_formation"],
             "squad_size": cfg["squad_size"],
+            "score_system": cfg["score_system"],
         }
 
     async def get_rules(self, user_id: str) -> dict:
@@ -138,6 +142,7 @@ class BiwengerCore:
             "budget": cfg["total_budget"],
             "max_players_same_team": cfg["max_players_same_team"],
             "squad_size": cfg["squad_size"],
+            "score_system": cfg["score_system"],
         }
         return ruleset
 
@@ -158,6 +163,9 @@ class BiwengerCore:
         formation = get_user_setting(user_id, "active_formation", "4-4-2")
         max_same_team = int(get_user_setting(user_id, "max_players_same_team", str(settings.group_max_players_same_team)))
         squad_size = int(get_user_setting(user_id, "squad_size", str(settings.default_squad_size)))
+        score_system = get_user_setting(user_id, "score_system", DEFAULT_SCORING_SYSTEM)
+        if score_system not in SCORING_SYSTEMS:
+            score_system = DEFAULT_SCORING_SYSTEM
         if not 11 <= squad_size <= 15:
             squad_size = 11
         try:
@@ -177,6 +185,7 @@ class BiwengerCore:
             "squad_size": squad_size,
             "num_substitutes": squad_size - 11,
             "total_players": squad_size,
+            "score_system": score_system,
         }
 
     async def update_settings(
@@ -186,6 +195,7 @@ class BiwengerCore:
         formation: str = None,
         max_same_team: int = None,
         squad_size: int = None,
+        score_system: str = None,
     ) -> dict:
         """Update configurations in the SQLite settings table."""
         if budget is not None:
@@ -206,6 +216,11 @@ class BiwengerCore:
             if not 11 <= squad_size <= 15:
                 raise ValueError("Squad size must be between 11 and 15 players.")
             set_user_setting(user_id, "squad_size", str(squad_size))
+
+        if score_system is not None:
+            if score_system not in SCORING_SYSTEMS:
+                raise ValueError("Invalid scoring system.")
+            set_user_setting(user_id, "score_system", score_system)
             
         return await self.get_settings(user_id)
 
@@ -218,7 +233,8 @@ class BiwengerCore:
         sort_by: str = "fixed_price", 
         active_only: bool = False,
         limit: int = 100, 
-        offset: int = 0
+        offset: int = 0,
+        score_system: str = DEFAULT_SCORING_SYSTEM,
     ) -> list[dict]:
         """Query normalized players from the database with optional active-only filtering."""
         if active_only:
@@ -228,11 +244,35 @@ class BiwengerCore:
             
             if active_teams:
                 # Fetch a larger set from DB and filter in memory to keep database.py simple
-                players = get_players_from_db(user_id, position, team, status, sort_by, "DESC", limit=10000, offset=0)
+                players = get_players_from_db(user_id, position, team, status, sort_by, "DESC", limit=10000, offset=0, score_system=score_system)
                 filtered = [p for p in players if p["team"] in active_teams]
                 return filtered[offset:offset+limit]
                 
-        return get_players_from_db(user_id, position, team, status, sort_by, "DESC", limit, offset)
+        return get_players_from_db(user_id, position, team, status, sort_by, "DESC", limit, offset, score_system)
+
+    async def get_selections(self) -> dict:
+        """Return the complete selection catalogue and canonical player-filter values."""
+        selections = []
+        for selection in get_selections_from_db():
+            filter_value = selection["name"]
+            selections.append({
+                **selection,
+                "filter_value": filter_value,
+                "players_query": (
+                    f"?{urlencode({'team': filter_value, 'active_only': 'false'})}"
+                    "&score_system=<score_system>"
+                ),
+            })
+        return {
+            "filter_parameter": "team",
+            "filter_format": "?team=<filter_value>&active_only=false&score_system=<score_system>",
+            "total": len(selections),
+            "selections": selections,
+        }
+
+    async def get_scoring_systems(self) -> dict:
+        """Return every scoring system published by the configured competition."""
+        return scoring_system_catalog()
 
     async def _sync_player_reports(self, player_id: str, slug: str, client: httpx.AsyncClient) -> bool:
         """Helper to fetch, parse, and save detailed match reports for a player from the API."""
@@ -297,12 +337,17 @@ class BiwengerCore:
             logger.error(f"Error syncing player reports for slug {slug}: {e}")
         return False
 
-    async def get_player(self, user_id: str, player_id: str) -> dict:
+    async def get_player(
+        self,
+        user_id: str,
+        player_id: str,
+        score_system: str = DEFAULT_SCORING_SYSTEM,
+    ) -> dict:
         """
         Get player by ID from database and lazy-load their detailed match history 
         and statistics (goals, assists, minutes, etc.) on demand from the API.
         """
-        players = get_players_from_db(user_id, limit=10000)
+        players = get_players_from_db(user_id, limit=10000, score_system=score_system)
         player_data = None
         for p in players:
             if p["id"] == player_id:
@@ -329,7 +374,7 @@ class BiwengerCore:
             db_reports = get_player_reports_from_db(player_id)
             
             # Reload player object to return updated metrics
-            players_updated = get_players_from_db(user_id, limit=10000)
+            players_updated = get_players_from_db(user_id, limit=10000, score_system=score_system)
             for p_upd in players_updated:
                 if p_upd["id"] == player_id:
                     player_data = p_upd
@@ -364,12 +409,14 @@ class BiwengerCore:
 
     async def get_market(self, user_id: str) -> dict:
         """Return the local fixed-price catalogue, not Biwenger's dynamic transfer market."""
-        players = get_players_from_db(user_id, limit=200)
+        score_system = (await self.get_settings(user_id))["score_system"]
+        players = get_players_from_db(user_id, limit=200, score_system=score_system)
         return {
             "user_id": user_id,
             "players": players,
             "price_mode": "fixed_catalog",
             "live_market": False,
+            "score_system": score_system,
         }
 
     async def sync_database(self) -> dict:
@@ -382,10 +429,15 @@ class BiwengerCore:
         
         # 1. Fetch Master Competition Data (Players & Teams)
         competition = settings.biwenger_competition_slug
-        data_url = f"https://cf.biwenger.com/api/v2/competitions/{competition}/data?lang=es&score=2"
+        data_urls = {
+            value: f"https://cf.biwenger.com/api/v2/competitions/{competition}/data?lang=es&score={details['source_id']}"
+            for value, details in SCORING_SYSTEMS.items()
+        }
         try:
             async with httpx.AsyncClient() as client:
-                resp_data = await client.get(data_url, timeout=30.0)
+                responses = await asyncio.gather(*(
+                    client.get(url, timeout=30.0) for url in data_urls.values()
+                ))
         except httpx.HTTPError as exc:
             logger.error("Biwenger synchronization request failed: %s", exc)
             return {
@@ -396,14 +448,19 @@ class BiwengerCore:
                 "message": "Biwenger public API is unavailable or the configured competition slug is invalid.",
             }
             
-        if resp_data.status_code != 200:
-            logger.error(f"Failed to fetch competition data: {resp_data.status_code}")
+        if any(response.status_code != 200 for response in responses):
+            statuses = [response.status_code for response in responses]
+            logger.error("Failed to fetch competition scoring data: %s", statuses)
             return {"synchronized": False, "players_count": 0, "matches_count": 0, "standings_count": 0, "message": "API Error"}
-            
+
         try:
-            json_data = resp_data.json().get("data", {})
+            score_payloads = {
+                score_system: response.json().get("data", {})
+                for score_system, response in zip(data_urls, responses)
+            }
         except ValueError:
-            json_data = {}
+            score_payloads = {}
+        json_data = score_payloads.get(DEFAULT_SCORING_SYSTEM, {})
         if not isinstance(json_data, dict) or not isinstance(json_data.get("players"), dict):
             return {
                 "synchronized": False,
@@ -421,6 +478,10 @@ class BiwengerCore:
             
         # Parse and save players
         players_dict = json_data.get("players", {})
+        points_by_system = {
+            score_system: payload.get("players", {})
+            for score_system, payload in score_payloads.items()
+        }
         normalized_players = []
         pos_map = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
         
@@ -454,6 +515,10 @@ class BiwengerCore:
                 "fixed_price_source": price_source,
                 "market_value": market_value,
                 "points": int(p.get("points", 0)),
+                "points_as": int(points_by_system["diario_as"].get(str(pid), {}).get("points", 0)),
+                "points_sofascore": int(points_by_system["sofascore"].get(str(pid), {}).get("points", 0)),
+                "points_average": int(points_by_system["average"].get(str(pid), {}).get("points", 0)),
+                "points_statistics": int(points_by_system["statistics"].get(str(pid), {}).get("points", 0)),
                 "status": normalize_player_status(p.get("status")),
                 "goals": 0,
                 "assists": 0
@@ -540,7 +605,6 @@ class BiwengerCore:
                 seen.add(p["id"])
                 
         logger.info(f"Prefetching detailed reports for {len(to_sync)} players...")
-        import asyncio
         sem = asyncio.Semaphore(10)
         
         async def worker(player, client):

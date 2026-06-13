@@ -16,6 +16,7 @@ def get_player_advanced_score(
     objective: str = "points_and_value",
     custom_ratings: dict[str, float] | None = None,
     risk_profile: str = "balanced",
+    score_system: str = "sofascore",
 ) -> float:
     """
     Calculate an advanced composite score for a player based on:
@@ -44,12 +45,15 @@ def get_player_advanced_score(
     else:
         base_points = float(player.get("points", 0))
 
-    num_matches = len(reports)
+    # Detailed reports are synchronized with SofaScore. Other official systems
+    # use their own aggregate total without mixing in SofaScore match form.
+    scoring_reports = reports if score_system == "sofascore" else []
+    num_matches = len(scoring_reports)
     avg_pts = base_points / max(1.0, num_matches) if num_matches > 0 else base_points
 
     # 3. Form Factor (average of last 3 matches)
     if num_matches > 0:
-        recent_reports = sorted(reports, key=lambda x: x.get("date", 0), reverse=True)[:3]
+        recent_reports = sorted(scoring_reports, key=lambda x: x.get("date", 0), reverse=True)[:3]
         form = sum(r.get("points", 0) for r in recent_reports) / len(recent_reports)
     else:
         form = avg_pts
@@ -106,7 +110,7 @@ def get_player_advanced_score(
         
     if num_matches >= 3:
         # Standard deviation penalty (variance in points)
-        pts_list = [float(r.get("points", 0)) for r in reports]
+        pts_list = [float(r.get("points", 0)) for r in scoring_reports]
         mean_val = sum(pts_list) / len(pts_list)
         variance = sum((x - mean_val) ** 2 for x in pts_list) / len(pts_list)
         std_dev = math.sqrt(variance)
@@ -114,7 +118,7 @@ def get_player_advanced_score(
             penalties += 1.5
             
         # Rotation penalty: average minutes played per match
-        avg_mins = sum(int(r.get("minutes_played", 0)) for r in reports) / num_matches
+        avg_mins = sum(int(r.get("minutes_played", 0)) for r in scoring_reports) / num_matches
         if avg_mins < 60:
             penalties += 3.0
 
@@ -194,7 +198,8 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
     )
     
     # 2. Load players list from database
-    raw_players = await core.get_players(user_id, limit=10000)
+    score_system = getattr(request, "score_system", "sofascore")
+    raw_players = await core.get_players(user_id, limit=10000, score_system=score_system)
     if not raw_players:
         return {
             "lineup": [],
@@ -308,7 +313,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
         opponent = next_opponents.get(p["team"])
         score = get_player_advanced_score(
             p, p_reports, standings_map, opponent, 
-            request.objective, custom_ratings, request.risk_profile
+            request.objective, custom_ratings, request.risk_profile, score_system
         )
         player_scores.append(score)
         
@@ -437,6 +442,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
         "ariete": ariete,
         "transfers": [],
         "expected_points": expected_points,
+        "score_system": score_system,
         "expected_value_growth": 0,
         "rule_checks": {
             "budget_ok": True,
@@ -457,7 +463,8 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
 
 async def analyze_captain_candidates(core: BiwengerCore, user_id: str, request) -> dict:
     """Analyze and rank the top captain candidates (price <= CAPTAIN_MAX_PRICE) from the database."""
-    players = await core.get_players(user_id, limit=10000)
+    score_system = getattr(request, "score_system", "sofascore")
+    players = await core.get_players(user_id, limit=10000, score_system=score_system)
     if not players:
         return {"best_candidate": None, "candidates": [], "explanation": ["No player database available."]}
         
@@ -508,7 +515,7 @@ async def analyze_captain_candidates(core: BiwengerCore, user_id: str, request) 
         opponent = next_opponents.get(p["team"])
         score = get_player_advanced_score(
             p, p_reports, standings_map, opponent, 
-            request.objective, custom_ratings, request.risk_profile
+            request.objective, custom_ratings, request.risk_profile, score_system
         )
         
         candidates.append({
@@ -532,6 +539,7 @@ async def analyze_captain_candidates(core: BiwengerCore, user_id: str, request) 
         explanation.append("No valid captain candidates found.")
         
     return {
+        "score_system": score_system,
         "best_candidate": top_candidates[0]["player"] if top_candidates else None,
         "candidates": top_candidates,
         "explanation": explanation
@@ -540,7 +548,8 @@ async def analyze_captain_candidates(core: BiwengerCore, user_id: str, request) 
 
 async def analyze_ariete_candidates(core: BiwengerCore, user_id: str, request) -> dict:
     """Analyze and rank the top ariete candidates (price <= ARIETE_MAX_PRICE, position MID or FWD) from the database."""
-    players = await core.get_players(user_id, limit=10000)
+    score_system = getattr(request, "score_system", "sofascore")
+    players = await core.get_players(user_id, limit=10000, score_system=score_system)
     if not players:
         return {"best_candidate": None, "candidates": [], "explanation": ["No player database available."]}
         
@@ -592,7 +601,7 @@ async def analyze_ariete_candidates(core: BiwengerCore, user_id: str, request) -
         opponent = next_opponents.get(p["team"])
         score = get_player_advanced_score(
             p, p_reports, standings_map, opponent, 
-            request.objective, custom_ratings, request.risk_profile
+            request.objective, custom_ratings, request.risk_profile, score_system
         )
         
         candidates.append({
@@ -616,6 +625,7 @@ async def analyze_ariete_candidates(core: BiwengerCore, user_id: str, request) -
         explanation.append("No valid ariete candidates found.")
         
     return {
+        "score_system": score_system,
         "best_candidate": top_candidates[0]["player"] if top_candidates else None,
         "candidates": top_candidates,
         "explanation": explanation
@@ -630,7 +640,8 @@ async def find_better_alternatives(core: BiwengerCore, user_id: str, request) ->
     player_id = request.player_id
     
     # 1. Load target player
-    target_player = await core.get_player(user_id, player_id)
+    score_system = getattr(request, "score_system", "sofascore")
+    target_player = await core.get_player(user_id, player_id, score_system)
     if not target_player:
         return {"target_player": None, "alternatives": [], "explanation": [f"Player with ID {player_id} not found."]}
         
@@ -643,7 +654,7 @@ async def find_better_alternatives(core: BiwengerCore, user_id: str, request) ->
         max_price = target_price + 3.0
         
     # 2. Load all players in the same position
-    players = await core.get_players(user_id, position=position, limit=10000)
+    players = await core.get_players(user_id, position=position, limit=10000, score_system=score_system)
     
     # Load reports, standings, and next fixtures
     all_reports = get_all_player_reports_from_db()
@@ -672,7 +683,7 @@ async def find_better_alternatives(core: BiwengerCore, user_id: str, request) ->
     target_opponent = next_opponents.get(target_player["team"])
     target_score = get_player_advanced_score(
         target_player, target_reports, standings_map, target_opponent, 
-        request.objective
+        request.objective, score_system=score_system
     )
     target_player["score"] = target_score
     
@@ -692,7 +703,7 @@ async def find_better_alternatives(core: BiwengerCore, user_id: str, request) ->
         opponent = next_opponents.get(p["team"])
         score = get_player_advanced_score(
             p, p_reports, standings_map, opponent, 
-            request.objective
+            request.objective, score_system=score_system
         )
         
         # We consider a player an alternative if:
@@ -735,6 +746,7 @@ async def find_better_alternatives(core: BiwengerCore, user_id: str, request) ->
         explanation.append(f"No better alternatives found for {target_player['name']} under {max_price:.1f}M.")
         
     return {
+        "score_system": score_system,
         "target_player": target_player,
         "alternatives": top_alts,
         "explanation": explanation

@@ -18,6 +18,7 @@ OUTPUT = ROOT / "openapi" / "mygpt_openapi_minimal.yaml"
 QUERY_PARAMETER_ENUMS = {
     ("players", "position"): ["GK", "DEF", "MID", "FWD"],
     ("players", "status"): ["ok", "doubtful", "injured", "suspended", "no_disponible"],
+    ("players", "score_system"): ["diario_as", "sofascore", "average", "statistics"],
     ("players", "sort_by"): ["fixed_price", "points", "market_value", "goals", "assists", "name", "team"],
     ("matches", "status"): ["pending", "preview", "finished"],
 }

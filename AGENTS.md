@@ -125,6 +125,10 @@ The Agent interacts via the following endpoints (API) or equivalent tools (MCP):
 *   **API:** `GET /api/users/{user_id}/rules` | **MCP:** `biwenger_get_rules(user_id)`
 *   **API:** `GET /api/users/{user_id}/team` | **MCP:** `biwenger_get_my_team(user_id)`
 *   **API:** `GET /api/users/{user_id}/market` | **MCP:** `biwenger_get_market(user_id)`
+*   **API:** `GET /api/users/{user_id}/selections`: returns every selection and the exact `team` filter value; this shared catalogue is also available at `GET /api/selections`.
+*   **API:** `GET /api/users/{user_id}/scoring-systems`: returns `diario_as`, `sofascore`, `average`, and `statistics`, including the upstream Biwenger score IDs. The same shared catalogue is available at `GET /api/scoring-systems`.
+    * Admin workspaces persist their default through `POST /api/users/{user_id}/settings` using `score_system`.
+    * Public player reads and calculations require `score_system`; when omitted they return `SCORING_SYSTEM_REQUIRED` with all valid choices so the client can ask the user.
 *   **API:** `GET /api/users/{user_id}/player/{player_id}` | **MCP:** `biwenger_get_player(user_id, player_id)`
 *   **API:** `POST /api/users/{user_id}/player/{player_id}/rating`: saves the rating only for this user.
 

@@ -76,7 +76,11 @@ Here is a detailed summary of what each profile can do:
 | **Alternative Suggestions** | **Allowed**. Evaluates value replacements for a squad player. | **Allowed**. Evaluates replacements using the default catalog. | `POST /api/suggest-alternatives` (Public) or `POST /api/users/{user_id}/suggest-alternatives` |
 | **Captain / Ariete Analysis** | **Allowed**. Picks candidates from user squad or global catalog. | **Allowed**. Picks candidates from global catalog using phase rules. | `POST /api/pick-captain` (Public/Private), `POST /api/pick-ariete` (Public/Private) |
 | **Player Comparisons** | **Allowed**. Compares stats of 2 to 5 players. | **Allowed**. Compares stats of 2 to 5 players. | `POST /api/compare-players` (Public/Private) |
-| **Shared Catalog Reads** | **Allowed**. Read active matches, group standings, league list, and catalog. | **Allowed**. Read active matches, group standings, league list, and catalog. | `/api/players`, `/api/matches`, `/api/standings`, etc. (Public) |
+| **Shared Catalog Reads** | **Allowed**. Read selections, active matches, group standings, league list, and catalog. | **Allowed**. Read selections, active matches, group standings, league list, and catalog. | `/api/selections`, `/api/players`, `/api/matches`, `/api/standings`, etc. (Public) |
+
+Use `GET /api/selections` to retrieve every national selection and its exact `filter_value`. To include eliminated selections when querying players, replace the scoring placeholder in the returned `players_query`, for example `GET /api/players?team=Espa%C3%B1a&active_only=false&score_system=sofascore`.
+
+Use `GET /api/scoring-systems` to retrieve the four official scoring filters published by Biwenger for the World Cup: `diario_as`, `sofascore`, `average`, and `statistics`. An admin can persist the workspace default with `POST /api/users/{user_id}/settings`. Private requests use that setting when `score_system` is omitted; public player reads and calculations return `SCORING_SYSTEM_REQUIRED` so the client can ask the user instead of assuming a system.
 
 ---
 

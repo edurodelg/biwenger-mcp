@@ -15,6 +15,7 @@ from .optimizer import (
 )
 from .database import get_db_setting
 from .config import settings
+from .scoring import ScoringSystem
 
 
 router = APIRouter(
@@ -26,6 +27,25 @@ public_router = APIRouter(
     prefix="/api",
     dependencies=[Depends(require_api_key)],
 )
+
+
+async def _resolve_user_score_system(user_id: str, requested: ScoringSystem | None) -> ScoringSystem:
+    if requested is not None:
+        return requested
+    return (await core.get_settings(user_id))["score_system"]
+
+
+async def _public_score_system_required(score_system: ScoringSystem | None) -> ApiResponse | None:
+    if score_system is not None:
+        return None
+    catalog = await core.get_scoring_systems()
+    return ApiResponse(
+        ok=False,
+        error="SCORING_SYSTEM_REQUIRED",
+        message="Choose a scoring system before calculating or comparing players.",
+        details={"parameter": "score_system", "values": catalog["values"]},
+        needs_review=True,
+    )
 
 @router.get("/status", response_model=ApiResponse, operation_id="getStatus")
 async def status_route(user_id: str):
@@ -54,6 +74,7 @@ async def update_settings(user_id: str, req: SettingsUpdateRequest):
             formation=req.active_formation,
             max_same_team=req.max_players_same_team,
             squad_size=req.squad_size,
+            score_system=req.score_system,
         )
         return ApiResponse(ok=True, data=updated, message="Settings updated successfully.")
     except ValueError as ex:
@@ -91,19 +112,22 @@ async def sync_database_via_get(user_id: str):
 async def get_players(
     user_id: str,
     position: str | None = Query(None, description="Filter by position: GK, DEF, MID, FWD"),
-    team: str | None = Query(None, description="Filter by country/national team name"),
+    team: str | None = Query(None, description="Exact national-team filter value returned by GET /selections"),
     status: str | None = Query(None, description="Filter by availability status: ok, doubtful, injured"),
+    score_system: ScoringSystem | None = Query(None, description="Uses the admin setting when omitted; values come from GET /scoring-systems"),
     sort_by: str = Query("fixed_price", description="Sort by: fixed_price, points, market_value, goals, assists"),
     active_only: bool = Query(True, description="Filter to show only players whose national teams are still active in the tournament"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0)
 ):
     """Fetch players with optional query filters, sorting, and pagination."""
+    score_system = await _resolve_user_score_system(user_id, score_system)
     players = await core.get_players(
         user_id=user_id,
         position=position,
         team=team,
         status=status,
+        score_system=score_system,
         sort_by=sort_by,
         active_only=active_only,
         limit=limit,
@@ -111,10 +135,27 @@ async def get_players(
     )
     return ApiResponse(ok=True, data=players)
 
+
+@router.get("/selections", response_model=ApiResponse, operation_id="listSelections")
+async def get_selections(user_id: str):
+    """Return all national selections and the exact values used by the players filter."""
+    return ApiResponse(ok=True, data=await core.get_selections())
+
+
+@router.get("/scoring-systems", response_model=ApiResponse, operation_id="listScoringSystems")
+async def get_scoring_systems(user_id: str):
+    """Return all supported scoring systems and their request filter values."""
+    return ApiResponse(ok=True, data=await core.get_scoring_systems())
+
 @router.get("/player/{player_id}", response_model=ApiResponse, operation_id="getPlayer")
-async def get_player(user_id: str, player_id: str):
+async def get_player(
+    user_id: str,
+    player_id: str,
+    score_system: ScoringSystem | None = Query(None, description="Uses the admin setting when omitted; values come from GET /scoring-systems"),
+):
     """Retrieve detailed stats for a specific player by ID."""
-    player_data = await core.get_player(user_id, player_id)
+    score_system = await _resolve_user_score_system(user_id, score_system)
+    player_data = await core.get_player(user_id, player_id, score_system)
     if player_data is None:
         return ApiResponse(
             ok=False,
@@ -180,9 +221,10 @@ async def update_player_rating(user_id: str, player_id: str, req: PlayerRatingUp
 @router.post("/compare-players", response_model=ApiResponse, operation_id="comparePlayers")
 async def compare_players(user_id: str, req: ComparePlayersRequest):
     """Compare performance metrics of multiple players."""
+    score_system = await _resolve_user_score_system(user_id, req.score_system)
     comparison = []
     for pid in req.player_ids:
-        player_data = await core.get_player(user_id, pid)
+        player_data = await core.get_player(user_id, pid, score_system)
         if player_data is None:
             return ApiResponse(
                 ok=False,
@@ -229,6 +271,7 @@ async def build_phase_plan(user_id: str, req: BuildPhasePlanRequest):
 @router.post("/optimize-lineup", response_model=ApiResponse, operation_id="optimizeLineup")
 async def optimize(user_id: str, req: OptimizeRequest):
     """Optimize 11 starters and 0-4 substitutes under the user's settings."""
+    req = req.model_copy(update={"score_system": await _resolve_user_score_system(user_id, req.score_system)})
     data = await optimize_lineup(core, user_id, req)
     return ApiResponse(
         ok=True, 
@@ -240,6 +283,7 @@ async def optimize(user_id: str, req: OptimizeRequest):
 @router.post("/pick-captain", response_model=ApiResponse, operation_id="pickCaptain")
 async def pick_captain(user_id: str, req: OptimizeRequest):
     """Analyze and rank top candidates to select the best captain."""
+    req = req.model_copy(update={"score_system": await _resolve_user_score_system(user_id, req.score_system)})
     data = await analyze_captain_candidates(core, user_id, req)
     return ApiResponse(
         ok=True, 
@@ -251,6 +295,7 @@ async def pick_captain(user_id: str, req: OptimizeRequest):
 @router.post("/pick-ariete", response_model=ApiResponse, operation_id="pickAriete")
 async def pick_ariete(user_id: str, req: OptimizeRequest):
     """Analyze and rank top candidates to select the best ariete."""
+    req = req.model_copy(update={"score_system": await _resolve_user_score_system(user_id, req.score_system)})
     data = await analyze_ariete_candidates(core, user_id, req)
     return ApiResponse(
         ok=True, 
@@ -262,6 +307,7 @@ async def pick_ariete(user_id: str, req: OptimizeRequest):
 @router.post("/suggest-alternatives", response_model=ApiResponse, operation_id="suggestAlternatives")
 async def suggest_alternatives(user_id: str, req: SuggestAlternativesRequest):
     """Suggest better or more cost-effective alternative players in the same position."""
+    req = req.model_copy(update={"score_system": await _resolve_user_score_system(user_id, req.score_system)})
     data = await find_better_alternatives(core, user_id, req)
     return ApiResponse(
         ok=True,
@@ -378,19 +424,24 @@ async def public_rules():
 @public_router.get("/players", response_model=ApiResponse, operation_id="listPublicPlayers")
 async def get_public_players(
     position: str | None = Query(None, description="Filter by position: GK, DEF, MID, FWD"),
-    team: str | None = Query(None, description="Filter by country/national team name"),
+    team: str | None = Query(None, description="Exact national-team filter value returned by GET /api/selections"),
     status: str | None = Query(None, description="Filter by availability status: ok, doubtful, injured"),
+    score_system: ScoringSystem | None = Query(None, description="Required; values come from GET /api/scoring-systems"),
     sort_by: str = Query("fixed_price", description="Sort by: fixed_price, points, market_value, goals, assists"),
     active_only: bool = Query(True, description="Filter to show only players whose national teams are still active in the tournament"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0)
 ):
     """Fetch players with optional query filters, sorting, and pagination (public catalog)."""
+    missing = await _public_score_system_required(score_system)
+    if missing:
+        return missing
     players = await core.get_players(
         user_id=None,
         position=position,
         team=team,
         status=status,
+        score_system=score_system,
         sort_by=sort_by,
         active_only=active_only,
         limit=limit,
@@ -399,10 +450,28 @@ async def get_public_players(
     return ApiResponse(ok=True, data=players)
 
 
+@public_router.get("/selections", response_model=ApiResponse, operation_id="listPublicSelections")
+async def get_public_selections():
+    """Return all national selections and the exact values used by the public players filter."""
+    return ApiResponse(ok=True, data=await core.get_selections())
+
+
+@public_router.get("/scoring-systems", response_model=ApiResponse, operation_id="listPublicScoringSystems")
+async def get_public_scoring_systems():
+    """Return all supported scoring systems and their request filter values."""
+    return ApiResponse(ok=True, data=await core.get_scoring_systems())
+
+
 @public_router.get("/player/{player_id}", response_model=ApiResponse, operation_id="getPublicPlayer")
-async def get_public_player(player_id: str):
+async def get_public_player(
+    player_id: str,
+    score_system: ScoringSystem | None = Query(None, description="Required; values come from GET /api/scoring-systems"),
+):
     """Retrieve detailed stats for a specific player by ID (public catalog)."""
-    player_data = await core.get_player(None, player_id)
+    missing = await _public_score_system_required(score_system)
+    if missing:
+        return missing
+    player_data = await core.get_player(None, player_id, score_system)
     if player_data is None:
         return ApiResponse(
             ok=False,
@@ -442,13 +511,16 @@ async def get_public_leagues():
 @public_router.post("/optimize-lineup", response_model=ApiResponse, operation_id="optimizePublicLineup")
 async def public_optimize(req: PublicOptimizeRequest):
     """Optimize 11 starters and 0-4 substitutes with custom budget/formation/squad size parameters without saving/loading user settings (stateless)."""
+    missing = await _public_score_system_required(req.score_system)
+    if missing:
+        return missing
     try:
         d, m, f = core.parse_formation(req.formation)
     except ValueError:
         d, m, f = 4, 4, 2
     
     rules = get_phase_rules(req.phase)
-    budget = req.budget or (rules["budget"] / 1_000_000.0)
+    budget = req.budget or rules["budget"]
     max_same_team = req.max_players_same_team or rules["max_players_same_team"]
     
     override_settings = {
@@ -476,6 +548,9 @@ async def public_optimize(req: PublicOptimizeRequest):
 @public_router.post("/suggest-alternatives", response_model=ApiResponse, operation_id="suggestPublicAlternatives")
 async def public_suggest_alternatives(req: SuggestAlternativesRequest):
     """Suggest better or more cost-effective alternative players in the same position (stateless)."""
+    missing = await _public_score_system_required(req.score_system)
+    if missing:
+        return missing
     data = await find_better_alternatives(core, settings.default_user_id, req)
     return ApiResponse(
         ok=True,
@@ -488,6 +563,9 @@ async def public_suggest_alternatives(req: SuggestAlternativesRequest):
 @public_router.post("/pick-captain", response_model=ApiResponse, operation_id="pickPublicCaptain")
 async def public_pick_captain(req: OptimizeRequest):
     """Analyze and rank top candidates to select the best captain (stateless)."""
+    missing = await _public_score_system_required(req.score_system)
+    if missing:
+        return missing
     data = await analyze_captain_candidates(core, settings.default_user_id, req)
     return ApiResponse(
         ok=True,
@@ -500,6 +578,9 @@ async def public_pick_captain(req: OptimizeRequest):
 @public_router.post("/pick-ariete", response_model=ApiResponse, operation_id="pickPublicAriete")
 async def public_pick_ariete(req: OptimizeRequest):
     """Analyze and rank top candidates to select the best ariete (stateless)."""
+    missing = await _public_score_system_required(req.score_system)
+    if missing:
+        return missing
     data = await analyze_ariete_candidates(core, settings.default_user_id, req)
     return ApiResponse(
         ok=True,
@@ -512,9 +593,12 @@ async def public_pick_ariete(req: OptimizeRequest):
 @public_router.post("/compare-players", response_model=ApiResponse, operation_id="comparePublicPlayers")
 async def public_compare_players(req: ComparePlayersRequest):
     """Compare performance metrics of multiple players (stateless)."""
+    missing = await _public_score_system_required(req.score_system)
+    if missing:
+        return missing
     comparison = []
     for pid in req.player_ids:
-        player_data = await core.get_player(settings.default_user_id, pid)
+        player_data = await core.get_player(settings.default_user_id, pid, req.score_system)
         if player_data is None:
             return ApiResponse(
                 ok=False,

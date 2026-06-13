@@ -1,11 +1,12 @@
 import json
+import asyncio
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src.app.import_catalog import import_catalog
 from src.app.core import core
-from src.app.database import get_connection, get_players_from_db, save_players_to_db
+from src.app.database import get_connection, get_players_from_db, get_selections_from_db, save_players_to_db
 from src.app.main import app
 from src.app.pricing import fixed_price_from_record, normalize_price_millions
 from src.app.security import lineup_confirmation_token
@@ -51,6 +52,79 @@ def test_team_filter_accepts_accents_and_curacao_alias():
     for team_filter in ("Curazao", "Curacao", "Curaçao"):
         players = get_players_from_db(team=team_filter)
         assert any(player["id"] == "curacao-player" for player in players)
+
+
+def test_team_filter_is_exact_and_selections_expose_filter_values():
+    save_players_to_db([
+        {
+            "id": "exact-spain",
+            "name": "Spain Player",
+            "slug": None,
+            "position": "MID",
+            "team": "España",
+            "fixed_price": 10.0,
+            "fixed_price_source": "test",
+            "market_value": 0.0,
+            "points": 0,
+            "status": "ok",
+        },
+        {
+            "id": "exact-equatorial-guinea",
+            "name": "Guinea Player",
+            "slug": None,
+            "position": "MID",
+            "team": "Guinea Ecuatorial",
+            "fixed_price": 10.0,
+            "fixed_price_source": "test",
+            "market_value": 0.0,
+            "points": 0,
+            "status": "ok",
+        },
+    ])
+
+    assert any(player["id"] == "exact-spain" for player in get_players_from_db(team="espana"))
+    assert not get_players_from_db(team="Esp")
+    selections = get_selections_from_db()
+    assert {item["name"] for item in selections} >= {"España", "Guinea Ecuatorial"}
+
+    data = asyncio.run(core.get_selections())
+    assert data["filter_parameter"] == "team"
+    assert data["total"] == len(data["selections"])
+    spain = next(item for item in data["selections"] if item["name"] == "España")
+    assert spain["filter_value"] == "España"
+    assert spain["players_query"] == "?team=Espa%C3%B1a&active_only=false&score_system=<score_system>"
+
+
+def test_scoring_system_selects_official_points_column():
+    save_players_to_db([{
+        "id": "scoring-player",
+        "name": "Scoring Player",
+        "slug": None,
+        "position": "FWD",
+        "team": "España",
+        "fixed_price": 12.0,
+        "fixed_price_source": "test",
+        "market_value": 0.0,
+        "points": 20,
+        "points_as": 10,
+        "points_sofascore": 20,
+        "points_average": 15,
+        "points_statistics": 30,
+        "status": "ok",
+    }])
+
+    expected = {"diario_as": 10, "sofascore": 20, "average": 15, "statistics": 30}
+    for score_system, points in expected.items():
+        player = next(
+            item for item in get_players_from_db(score_system=score_system, limit=10000)
+            if item["id"] == "scoring-player"
+        )
+        assert player["points"] == points
+        assert player["points_by_system"] == expected
+
+    data = asyncio.run(core.get_scoring_systems())
+    assert data["default"] == "sofascore"
+    assert [item["value"] for item in data["values"]] == list(expected)
 
 
 def test_catalog_import_rejects_invalid_rows_atomically(tmp_path):
@@ -113,7 +187,7 @@ def test_api_settings_are_isolated_per_user():
     alice = client.post(
         "/api/users/alice/settings",
         headers=headers,
-        json={"squad_size": 12, "total_budget": 900},
+        json={"squad_size": 12, "total_budget": 900, "score_system": "average"},
     )
     bob = client.post(
         "/api/users/bob/settings",
@@ -123,10 +197,17 @@ def test_api_settings_are_isolated_per_user():
     assert alice.json()["data"]["squad_size"] == 12
     assert bob.json()["data"]["squad_size"] == 15
     assert client.get("/api/users/alice/settings", headers=headers).json()["data"]["total_budget"] == 900
+    assert client.get("/api/users/alice/settings", headers=headers).json()["data"]["score_system"] == "average"
+    assert client.get("/api/users/bob/settings", headers=headers).json()["data"]["score_system"] == "sofascore"
 
 
 @pytest.mark.asyncio
 async def test_sync_stores_players_matches_standings_and_reports(monkeypatch):
+    with get_connection() as conn:
+        for table in ("player_reports", "standings", "matches", "players"):
+            conn.execute(f"DELETE FROM {table}")
+        conn.commit()
+
     class FakeResponse:
         def __init__(self, payload, status_code=200):
             self.payload = payload
@@ -173,13 +254,25 @@ async def test_sync_stores_players_matches_standings_and_reports(monkeypatch):
                     "home": {"id": 10, "name": "Spain", "score": 2},
                     "away": {"id": 20, "name": "France", "score": 1},
                 }]}]}})
+            score_points = {"score=1": 11, "score=2": 22, "score=3": 33, "score=4": 44}
+            points = next((value for marker, value in score_points.items() if marker in url), 7)
             return FakeResponse({"data": {
                 "teams": {"10": {"name": "Spain"}},
                 "players": {"p1": {
                     "name": "Jugador Uno", "slug": "jugador-uno", "position": 3,
                     "teamID": 10, "fantasyPrice": 9_500_000, "price": 99_000_000,
-                    "points": 7, "status": "ok",
+                    "points": points, "status": "ok",
                 }},
+                "activeEvents": [{
+                    "name": "Grupo A",
+                    "games": [{
+                        "id": 501,
+                        "date": 1_800_000_000,
+                        "status": "finished",
+                        "home": {"id": 10, "name": "Spain", "score": 2},
+                        "away": {"id": 20, "name": "France", "score": 1},
+                    }],
+                }],
                 "season": {"rounds": [{"id": 1, "name": "Grupo A"}]},
             }})
 
@@ -192,8 +285,12 @@ async def test_sync_stores_players_matches_standings_and_reports(monkeypatch):
     assert result["matches_count"] == 1
     assert result["standings_count"] == 1
     with get_connection() as conn:
-        player = conn.execute("SELECT fixed_price, market_value, goals, assists FROM players WHERE id = 'p1'").fetchone()
-        assert tuple(player) == (9.5, 99.0, 1, 1)
+        player = conn.execute(
+            """SELECT fixed_price, market_value, goals, assists, points_as,
+                      points_sofascore, points_average, points_statistics
+               FROM players WHERE id = 'p1'"""
+        ).fetchone()
+        assert tuple(player) == (9.5, 99.0, 1, 1, 11, 22, 33, 44)
         assert conn.execute("SELECT count(*) FROM matches WHERE id = 501").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM standings WHERE team_id = 10").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM player_reports WHERE player_id = 'p1'").fetchone()[0] == 1
@@ -238,9 +335,9 @@ async def test_case_and_accent_insensitive_search():
     players_es2 = get_players_from_db(team="ESPAÑA")
     assert len(players_es2) >= 1
     
-    # Test substring
+    # Partial names are intentionally rejected to avoid ambiguous selections.
     players_es3 = get_players_from_db(team="Esp")
-    assert len(players_es3) >= 1
+    assert players_es3 == []
 
     # Test accents removal
     players_be = get_players_from_db(team="belgica")
@@ -368,9 +465,20 @@ async def test_public_get_endpoints_without_user():
     assert "interface_mode" in resp_status.json()["data"]
     
     # Test public players
-    resp_players = client.get("/api/players", headers=headers)
+    missing_score = client.get("/api/players", headers=headers)
+    assert missing_score.json()["error"] == "SCORING_SYSTEM_REQUIRED"
+
+    resp_players = client.get("/api/players", headers=headers, params={"score_system": "sofascore"})
     assert resp_players.status_code == 200
     assert resp_players.json()["ok"] is True
+
+    resp_selections = client.get("/api/selections", headers=headers)
+    assert resp_selections.status_code == 200
+    assert resp_selections.json()["data"]["filter_parameter"] == "team"
+
+    resp_scoring = client.get("/api/scoring-systems", headers=headers)
+    assert resp_scoring.status_code == 200
+    assert len(resp_scoring.json()["data"]["values"]) == 4
     
     # Test public matches
     resp_matches = client.get("/api/matches", headers=headers)
@@ -396,7 +504,8 @@ async def test_public_stateless_computations(monkeypatch):
                 "objective": "points_and_value",
                 "budget": 920.0,
                 "formation": "4-4-2",
-                "squad_size": 11
+                "squad_size": 11,
+                "score_system": "sofascore",
             }
         )
         assert opt_resp.status_code == 200
@@ -416,7 +525,7 @@ async def test_public_stateless_computations(monkeypatch):
         alt_resp = client.post(
             "/api/suggest-alternatives",
             headers=headers,
-            json={"player_id": "s-2", "max_price": 50.0}
+            json={"player_id": "s-2", "max_price": 50.0, "score_system": "sofascore"}
         )
         assert alt_resp.status_code == 200
         assert alt_resp.json()["ok"] is True
@@ -425,7 +534,7 @@ async def test_public_stateless_computations(monkeypatch):
         cap_resp = client.post(
             "/api/pick-captain",
             headers=headers,
-            json={"phase": "groups"}
+            json={"phase": "groups", "score_system": "sofascore"}
         )
         assert cap_resp.status_code == 200
         assert cap_resp.json()["ok"] is True
@@ -433,7 +542,7 @@ async def test_public_stateless_computations(monkeypatch):
         ariete_resp = client.post(
             "/api/pick-ariete",
             headers=headers,
-            json={"phase": "groups"}
+            json={"phase": "groups", "score_system": "sofascore"}
         )
         assert ariete_resp.status_code == 200
         assert ariete_resp.json()["ok"] is True
@@ -442,7 +551,7 @@ async def test_public_stateless_computations(monkeypatch):
         comp_resp = client.post(
             "/api/compare-players",
             headers=headers,
-            json={"player_ids": ["s-2", "s-3"]}
+            json={"player_ids": ["s-2", "s-3"], "score_system": "sofascore"}
         )
         assert comp_resp.status_code == 200
         assert comp_resp.json()["ok"] is True

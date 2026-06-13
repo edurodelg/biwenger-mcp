@@ -3,6 +3,7 @@ import logging
 import unicodedata
 from pathlib import Path
 from .config import settings
+from .scoring import DEFAULT_SCORING_SYSTEM, SCORING_SYSTEMS
 
 logger = logging.getLogger("Database")
 
@@ -44,6 +45,7 @@ def get_connection():
     """Get a connection to the SQLite database with row factory enabled."""
     conn = sqlite3.connect(get_db_path())
     conn.create_function("remove_accents", 1, remove_accents)
+    conn.create_function("normalize_team", 1, normalize_team_filter)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -67,6 +69,10 @@ def init_db():
             fixed_price_source TEXT,
             market_value REAL DEFAULT 0.0,
             points INTEGER DEFAULT 0,
+            points_as INTEGER DEFAULT 0,
+            points_sofascore INTEGER DEFAULT 0,
+            points_average INTEGER DEFAULT 0,
+            points_statistics INTEGER DEFAULT 0,
             status TEXT DEFAULT 'ok',
             goals INTEGER DEFAULT 0,
             assists INTEGER DEFAULT 0,
@@ -81,6 +87,17 @@ def init_db():
             cursor.execute("ALTER TABLE players ADD COLUMN manual_rating REAL DEFAULT NULL")
         if "fixed_price_source" not in cols:
             cursor.execute("ALTER TABLE players ADD COLUMN fixed_price_source TEXT")
+        score_columns = {
+            "points_as": "INTEGER DEFAULT 0",
+            "points_sofascore": "INTEGER DEFAULT 0",
+            "points_average": "INTEGER DEFAULT 0",
+            "points_statistics": "INTEGER DEFAULT 0",
+        }
+        for column, definition in score_columns.items():
+            if column not in cols:
+                cursor.execute(f"ALTER TABLE players ADD COLUMN {column} {definition}")
+                if column == "points_sofascore":
+                    cursor.execute("UPDATE players SET points_sofascore = points")
 
         
         # 2. Matches Table
@@ -233,13 +250,21 @@ def save_players_to_db(players_list: list[dict]):
     """Insert or update a batch of normalized player records, preserving manual ratings."""
     for player in players_list:
         player.setdefault("fixed_price_source", "unspecified")
+        player.setdefault("points_as", 0)
+        player.setdefault("points_sofascore", player.get("points", 0))
+        player.setdefault("points_average", 0)
+        player.setdefault("points_statistics", 0)
     try:
         with get_connection() as conn:
             conn.executemany("""
             INSERT INTO players (
-                id, name, slug, position, team, fixed_price, fixed_price_source, market_value, points, status, goals, assists, manual_rating
+                id, name, slug, position, team, fixed_price, fixed_price_source, market_value,
+                points, points_as, points_sofascore, points_average, points_statistics,
+                status, goals, assists, manual_rating
             ) VALUES (
-                :id, :name, :slug, :position, :team, :fixed_price, :fixed_price_source, :market_value, :points, :status, 0, 0, NULL
+                :id, :name, :slug, :position, :team, :fixed_price, :fixed_price_source, :market_value,
+                :points, :points_as, :points_sofascore, :points_average, :points_statistics,
+                :status, 0, 0, NULL
             )
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
@@ -250,6 +275,10 @@ def save_players_to_db(players_list: list[dict]):
                 fixed_price_source = excluded.fixed_price_source,
                 market_value = excluded.market_value,
                 points = excluded.points,
+                points_as = excluded.points_as,
+                points_sofascore = excluded.points_sofascore,
+                points_average = excluded.points_average,
+                points_statistics = excluded.points_statistics,
                 status = excluded.status
             """, players_list)
             conn.commit()
@@ -285,13 +314,20 @@ def get_players_from_db(
     sort_by: str = "fixed_price", 
     order: str = "DESC",
     limit: int = 100, 
-    offset: int = 0
+    offset: int = 0,
+    score_system: str = DEFAULT_SCORING_SYSTEM,
 ) -> list[dict]:
     """Retrieve player records with dynamic filters, sorting, and pagination."""
+    if score_system not in SCORING_SYSTEMS:
+        score_system = DEFAULT_SCORING_SYSTEM
+    score_details = SCORING_SYSTEMS[score_system]
+    points_column = score_details["points_column"]
+
     if user_id:
         query = """
         SELECT p.id, p.name, p.slug, p.position, p.team, p.fixed_price,
-               p.fixed_price_source, p.market_value, p.points, p.status,
+               p.fixed_price_source, p.market_value, p.points, p.points_as,
+               p.points_sofascore, p.points_average, p.points_statistics, p.status,
                p.goals, p.assists, upr.manual_rating AS manual_rating
         FROM players p
         LEFT JOIN user_player_ratings upr
@@ -309,8 +345,8 @@ def get_players_from_db(
         query += " AND position = ?"
         params.append(position.upper())
     if team:
-        query += " AND remove_accents(team) LIKE ?"
-        params.append(f"%{normalize_team_filter(team)}%")
+        query += " AND normalize_team(team) = ?"
+        params.append(normalize_team_filter(team))
     if status:
         query += " AND status = ?"
         params.append(status.lower())
@@ -322,16 +358,55 @@ def get_players_from_db(
     if order.upper() not in ("ASC", "DESC"):
         order = "DESC"
         
-    query += f" ORDER BY {sort_prefix}{sort_by} {order.upper()} LIMIT ? OFFSET ?"
+    sort_column = points_column if sort_by == "points" else sort_by
+    query += f" ORDER BY {sort_prefix}{sort_column} {order.upper()} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     
     try:
         with get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
-            return [dict(r) for r in rows]
+            players = []
+            for row in rows:
+                player = dict(row)
+                player["points_by_system"] = {
+                    "diario_as": player["points_as"],
+                    "sofascore": player["points_sofascore"],
+                    "average": player["points_average"],
+                    "statistics": player["points_statistics"],
+                }
+                player["points"] = player[points_column]
+                player["score_system"] = score_system
+                players.append(player)
+            return players
     except Exception as e:
         logger.error(f"Error fetching players: {e}")
         return []
+
+
+def get_selections_from_db() -> list[dict]:
+    """Return every national selection and its player count without pagination."""
+    try:
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT team
+                FROM players
+                WHERE TRIM(team) <> ''
+                ORDER BY remove_accents(team), team
+                """
+            ).fetchall()
+    except Exception as e:
+        logger.error(f"Error fetching selections: {e}")
+        return []
+
+    selections: dict[str, dict] = {}
+    for row in rows:
+        name = row["team"].strip()
+        key = normalize_team_filter(name)
+        if key not in selections:
+            selections[key] = {"name": name, "player_count": 0}
+        selections[key]["player_count"] += 1
+    return list(selections.values())
 
 def update_player_aggregate_stats(player_id: str, goals: int, assists: int):
     """Update total goals and assists for a specific player."""

@@ -4,7 +4,7 @@ import pytest
 
 from src.app.core import core, matches_from_active_events, normalize_player_status
 from src.app.database import get_connection, init_db, save_players_to_db
-from src.app.optimizer import optimize_lineup
+from src.app.optimizer import get_player_advanced_score, optimize_lineup
 from src.app.rules import get_phase_rules
 from src.app.schemas import OptimizeRequest
 
@@ -27,6 +27,29 @@ def build_players() -> list[dict]:
                 "status": "ok",
             })
     return players
+
+
+def test_non_sofascore_calculation_does_not_mix_sofascore_report_form():
+    player = {
+        "id": "score-test",
+        "position": "MID",
+        "status": "ok",
+        "fixed_price": 10.0,
+        "points": 40,
+        "goals": 0,
+        "assists": 0,
+    }
+    reports = [{"points": 1, "date": 1, "minutes_played": 90}]
+
+    sofascore_result = get_player_advanced_score(
+        player, reports, {}, None, objective="points", score_system="sofascore"
+    )
+    statistics_result = get_player_advanced_score(
+        player, reports, {}, None, objective="points", score_system="statistics"
+    )
+
+    assert sofascore_result == 22.35
+    assert statistics_result == 36.0
 
 
 def test_active_events_keep_their_real_round_name():

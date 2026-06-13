@@ -74,9 +74,14 @@ async def biwenger_get_standings(user_id: str | None = None) -> dict:
 
 
 @mcp.tool()
-async def biwenger_get_player(player_id: str, user_id: str | None = None) -> dict:
+async def biwenger_get_player(
+    player_id: str,
+    score_system: str | None = None,
+    user_id: str | None = None,
+) -> dict:
     user_id = user_id or settings.default_user_id
-    player = await core.get_player(user_id, player_id)
+    score_system = score_system or (await core.get_settings(user_id))["score_system"]
+    player = await core.get_player(user_id, player_id, score_system)
     if player is None:
         return {
             "ok": False,
@@ -92,6 +97,7 @@ async def biwenger_get_players(
     position: str | None = None,
     team: str | None = None,
     status: str | None = None,
+    score_system: str | None = None,
     sort_by: str = "fixed_price",
     active_only: bool = True,
     limit: int = 100,
@@ -100,11 +106,13 @@ async def biwenger_get_players(
 ) -> dict:
     """Fetch players with optional query filters, sorting, and pagination."""
     user_id = user_id or settings.default_user_id
+    score_system = score_system or (await core.get_settings(user_id))["score_system"]
     players = await core.get_players(
         user_id=user_id,
         position=position,
         team=team,
         status=status,
+        score_system=score_system,
         sort_by=sort_by,
         active_only=active_only,
         limit=limit,
@@ -119,15 +127,18 @@ async def biwenger_optimize_lineup(
     matchday: int = 1,
     risk_profile: str = "balanced",
     objective: str = "points_and_value",
+    score_system: str | None = None,
     base_players: list[str] | None = None,
     user_id: str | None = None,
 ) -> dict:
     user_id = user_id or settings.default_user_id
+    score_system = score_system or (await core.get_settings(user_id))["score_system"]
     req = OptimizeRequest(
         phase=phase,
         matchday=matchday,
         risk_profile=risk_profile,
         objective=objective,
+        score_system=score_system,
         base_players=base_players,
     )
     data = await optimize_lineup(core, user_id, req)
@@ -143,10 +154,12 @@ async def biwenger_pick_captain(
     phase: str = "groups",
     matchday: int = 1,
     risk_profile: str = "balanced",
+    score_system: str | None = None,
     user_id: str | None = None,
 ) -> dict:
     user_id = user_id or settings.default_user_id
-    req = OptimizeRequest(phase=phase, matchday=matchday, risk_profile=risk_profile)
+    score_system = score_system or (await core.get_settings(user_id))["score_system"]
+    req = OptimizeRequest(phase=phase, matchday=matchday, risk_profile=risk_profile, score_system=score_system)
     data = await analyze_captain_candidates(core, user_id, req)
     return {"ok": True, "data": data, "needs_review": data.get("best_candidate") is None}
 
@@ -156,20 +169,27 @@ async def biwenger_pick_ariete(
     phase: str = "groups",
     matchday: int = 1,
     risk_profile: str = "balanced",
+    score_system: str | None = None,
     user_id: str | None = None,
 ) -> dict:
     user_id = user_id or settings.default_user_id
-    req = OptimizeRequest(phase=phase, matchday=matchday, risk_profile=risk_profile)
+    score_system = score_system or (await core.get_settings(user_id))["score_system"]
+    req = OptimizeRequest(phase=phase, matchday=matchday, risk_profile=risk_profile, score_system=score_system)
     data = await analyze_ariete_candidates(core, user_id, req)
     return {"ok": True, "data": data, "needs_review": data.get("best_candidate") is None}
 
 
 @mcp.tool()
-async def biwenger_compare_players(player_ids: list[str], user_id: str | None = None) -> dict:
+async def biwenger_compare_players(
+    player_ids: list[str],
+    score_system: str | None = None,
+    user_id: str | None = None,
+) -> dict:
     user_id = user_id or settings.default_user_id
+    score_system = score_system or (await core.get_settings(user_id))["score_system"]
     comparison = []
     for pid in player_ids:
-        player_data = await core.get_player(user_id, pid)
+        player_data = await core.get_player(user_id, pid, score_system)
         if player_data is None:
             return {
                 "ok": False,
@@ -282,16 +302,19 @@ async def biwenger_suggest_alternatives(
     player_id: str,
     max_price: float | None = None,
     objective: str = "points_and_value",
+    score_system: str | None = None,
     user_id: str | None = None,
 ) -> dict:
     user_id = user_id or settings.default_user_id
+    score_system = score_system or (await core.get_settings(user_id))["score_system"]
     class SimpleReq:
-        def __init__(self, p_id, m_price, obj):
+        def __init__(self, p_id, m_price, obj, scoring):
             self.player_id = p_id
             self.max_price = m_price
             self.objective = obj
+            self.score_system = scoring
             
-    req = SimpleReq(player_id, max_price, objective)
+    req = SimpleReq(player_id, max_price, objective, score_system)
     data = await find_better_alternatives(core, user_id, req)
     return {"ok": True, "data": data}
 
@@ -302,6 +325,7 @@ async def biwenger_update_settings(
     active_formation: str | None = None,
     max_players_same_team: int | None = None,
     squad_size: int | None = None,
+    score_system: str | None = None,
     user_id: str | None = None,
 ) -> dict:
     """Update configurations in settings (e.g. budget, active formation layout)."""
@@ -313,6 +337,7 @@ async def biwenger_update_settings(
             formation=active_formation,
             max_same_team=max_players_same_team,
             squad_size=squad_size,
+            score_system=score_system,
         )
         return {"ok": True, "data": updated, "message": "Settings updated successfully."}
     except Exception as ex:

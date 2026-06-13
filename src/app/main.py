@@ -24,7 +24,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Biwenger Agent API",
-        version="0.2.0",
+        version="0.1.1",
         description="Multitenant fixed-price squad optimizer for Biwenger World Cup 2026.",
         docs_url=None,
         redoc_url=None,

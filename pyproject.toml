@@ -1,6 +1,6 @@
 [project]
 name = "biwenger-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fixed-price squad optimizer and API/MCP server for Biwenger World Cup 2026"
 readme = "README.md"
 requires-python = ">=3.11"

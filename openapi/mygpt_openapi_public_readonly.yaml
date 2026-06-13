@@ -3,7 +3,7 @@ info:
   title: Biwenger Mundial 2026 Public API (Read-Only)
   description: API pública de precios fijos para consultar y calcular sobre el catálogo
     del Mundial 2026. Las operaciones no modifican datos y requieren X-API-Key.
-  version: 0.2.0
+  version: 0.1.1
 paths:
   /api/status:
     get:
@@ -62,10 +62,10 @@ paths:
         in: query
         required: false
         schema:
-          description: Filter by country/national team name
+          description: Exact national-team filter value returned by GET /api/selections
           title: Team
           type: string
-        description: Filter by country/national team name
+        description: Exact national-team filter value returned by GET /api/selections
         style: form
         explode: true
       - name: status
@@ -82,6 +82,21 @@ paths:
           - suspended
           - no_disponible
         description: 'Filter by availability status: ok, doubtful, injured'
+        style: form
+        explode: true
+      - name: score_system
+        in: query
+        required: false
+        schema:
+          description: Required; values come from GET /api/scoring-systems
+          title: Score System
+          enum:
+          - diario_as
+          - sofascore
+          - average
+          - statistics
+          type: string
+        description: Required; values come from GET /api/scoring-systems
         style: form
         explode: true
       - name: sort_by
@@ -150,6 +165,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/selections:
+    get:
+      summary: Get Public Selections
+      description: Return all national selections and the exact values used by the
+        public players filter.
+      operationId: listPublicSelections
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+      security:
+      - APIKeyHeader: []
+  /api/scoring-systems:
+    get:
+      summary: Get Public Scoring Systems
+      description: Return all supported scoring systems and their request filter values.
+      operationId: listPublicScoringSystems
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+      security:
+      - APIKeyHeader: []
   /api/player/{player_id}:
     get:
       summary: Get Public Player
@@ -164,6 +208,21 @@ paths:
         schema:
           type: string
           title: Player Id
+      - name: score_system
+        in: query
+        required: false
+        schema:
+          description: Required; values come from GET /api/scoring-systems
+          title: Score System
+          enum:
+          - diario_as
+          - sofascore
+          - average
+          - statistics
+          type: string
+        description: Required; values come from GET /api/scoring-systems
+        style: form
+        explode: true
       responses:
         '200':
           description: Successful Response
@@ -498,6 +557,16 @@ components:
           minItems: 2
           title: Player Ids
           description: List of 2 to 5 player IDs to compare
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
       type: object
       required:
       - player_ids
@@ -571,6 +640,16 @@ components:
           - points_and_value
           title: Objective
           default: points_and_value
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
         custom_ratings:
           anyOf:
           - additionalProperties:
@@ -653,6 +732,16 @@ components:
           - points_and_value
           title: Objective
           default: points_and_value
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
         custom_ratings:
           anyOf:
           - additionalProperties:
@@ -770,6 +859,17 @@ components:
           - type: 'null'
           title: Squad Size
           description: Choose any squad size from 11 to 15
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
+          description: Default scoring system for this admin workspace
       type: object
       title: SettingsUpdateRequest
     SuggestAlternativesRequest:
@@ -793,6 +893,16 @@ components:
           - points_and_value
           title: Objective
           default: points_and_value
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
       type: object
       required:
       - player_id

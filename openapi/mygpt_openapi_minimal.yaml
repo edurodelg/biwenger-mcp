@@ -7,7 +7,7 @@ info:
     por sí solo. Las acciones de plantilla son simulaciones locales y requieren el
     confirmation_token devuelto por la API. No existe acceso a credenciales ni a la
     cuenta real de Biwenger.
-  version: 0.2.0
+  version: 0.1.1
 paths:
   /api/users/{user_id}/status:
     get:
@@ -232,10 +232,10 @@ paths:
         in: query
         required: false
         schema:
-          description: Filter by country/national team name
+          description: Exact national-team filter value returned by GET /selections
           title: Team
           type: string
-        description: Filter by country/national team name
+        description: Exact national-team filter value returned by GET /selections
         style: form
         explode: true
       - name: status
@@ -252,6 +252,21 @@ paths:
           - suspended
           - no_disponible
         description: 'Filter by availability status: ok, doubtful, injured'
+        style: form
+        explode: true
+      - name: score_system
+        in: query
+        required: false
+        schema:
+          description: Uses the admin setting when omitted; values come from GET /scoring-systems
+          title: Score System
+          enum:
+          - diario_as
+          - sofascore
+          - average
+          - statistics
+          type: string
+        description: Uses the admin setting when omitted; values come from GET /scoring-systems
         style: form
         explode: true
       - name: sort_by
@@ -320,6 +335,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/selections:
+    get:
+      summary: Get Selections
+      description: Return all national selections and the exact values used by the
+        players filter.
+      operationId: listSelections
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/users/{user_id}/scoring-systems:
+    get:
+      summary: Get Scoring Systems
+      description: Return all supported scoring systems and their request filter values.
+      operationId: listScoringSystems
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: User Id
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+          maxLength: 64
+        description: Stable tenant identifier; this is not authentication.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/users/{user_id}/player/{player_id}:
     get:
       summary: Get Player
@@ -343,6 +419,21 @@ paths:
         schema:
           type: string
           title: Player Id
+      - name: score_system
+        in: query
+        required: false
+        schema:
+          description: Uses the admin setting when omitted; values come from GET /scoring-systems
+          title: Score System
+          enum:
+          - diario_as
+          - sofascore
+          - average
+          - statistics
+          type: string
+        description: Uses the admin setting when omitted; values come from GET /scoring-systems
+        style: form
+        explode: true
       responses:
         '200':
           description: Successful Response
@@ -1055,6 +1146,16 @@ components:
           minItems: 2
           title: Player Ids
           description: List of 2 to 5 player IDs to compare
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
       type: object
       required:
       - player_ids
@@ -1128,6 +1229,16 @@ components:
           - points_and_value
           title: Objective
           default: points_and_value
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
         custom_ratings:
           anyOf:
           - additionalProperties:
@@ -1210,6 +1321,16 @@ components:
           - points_and_value
           title: Objective
           default: points_and_value
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
         custom_ratings:
           anyOf:
           - additionalProperties:
@@ -1327,6 +1448,17 @@ components:
           - type: 'null'
           title: Squad Size
           description: Choose any squad size from 11 to 15
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
+          description: Default scoring system for this admin workspace
       type: object
       title: SettingsUpdateRequest
     SuggestAlternativesRequest:
@@ -1350,6 +1482,16 @@ components:
           - points_and_value
           title: Objective
           default: points_and_value
+        score_system:
+          anyOf:
+          - type: string
+            enum:
+            - diario_as
+            - sofascore
+            - average
+            - statistics
+          - type: 'null'
+          title: Score System
       type: object
       required:
       - player_id
