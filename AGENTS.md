@@ -82,7 +82,7 @@ Prizes are allocated for a dinner or lunch at a venue chosen by the winner: 1st 
 
 ### Positional Roles and Restrictions
 *   **Captain:** Cannot be a Goalkeeper (`GK`), and their price limit depends on the phase, starting at 70M.
-*   **Ariete (Striker):** Must be a `FWD` or `MID`, and their price limit depends on the phase, starting at 90M.
+*   **Ariete (Striker):** Must be a `FWD`, and their price limit depends on the phase, starting at 90M.
 *   **Configurable Size:** Exactly 11 starters and between 0 and 4 substitutes, for a configurable total of 11 to 15 players.
 *   Substitutes cannot share a position. With four substitutes, there must be exactly one `GK`, `DEF`, `MID`, and `FWD`.
 *   The budget is calculated based on all selected players (starters + substitutes).
@@ -117,6 +117,10 @@ $$\text{Composite Score}_i = 0.4 \cdot \text{BaseRating}_i + 0.3 \cdot \text{For
 ## API Endpoints Contract and MCP Mapping
 
 `openapi/mygpt_openapi_minimal.yaml` is generated from FastAPI using `python scripts/export_mygpt_openapi.py`. Do not modify the contract manually: every new route must have a unique `operation_id`, regenerate the YAML, and pass `tests/test_mygpt_contract.py`.
+
+MyGPT instructions are stored alongside the contracts:
+* `openapi/prompt_private.md` for the tenant/admin Actions contract.
+* `openapi/prompt_public.md` for the general read-only Actions contract.
 
 The Agent interacts via the following endpoints (API) or equivalent tools (MCP):
 

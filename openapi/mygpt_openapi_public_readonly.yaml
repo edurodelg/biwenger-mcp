@@ -81,7 +81,7 @@ paths:
         description: Filter by availability status
       - name: score_system
         in: query
-        required: false
+        required: true
         schema:
           description: Required; values come from GET /api/scoring-systems
           title: Score System
@@ -195,7 +195,7 @@ paths:
           title: Player Id
       - name: score_system
         in: query
-        required: false
+        required: true
         schema:
           description: Required; values come from GET /api/scoring-systems
           title: Score System
@@ -550,6 +550,7 @@ components:
       type: object
       required:
       - player_ids
+      - score_system
       title: ComparePlayersRequest
     HTTPValidationError:
       properties:
@@ -648,6 +649,8 @@ components:
             lineup
       type: object
       title: OptimizeRequest
+      required:
+      - score_system
     PlayerActionPayload:
       properties:
         player_id:
@@ -772,6 +775,8 @@ components:
           default: 11
       type: object
       title: PublicOptimizeRequest
+      required:
+      - score_system
     SetLineupActionRequest:
       properties:
         confirmation_token:
@@ -894,6 +899,7 @@ components:
       type: object
       required:
       - player_id
+      - score_system
       title: SuggestAlternativesRequest
     ValidationError:
       properties:

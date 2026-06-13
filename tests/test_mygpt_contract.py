@@ -121,6 +121,7 @@ def test_public_contract_has_all_stateless_operations_and_stable_query_parameter
     assert players_parameters["score_system"]["schema"]["enum"] == [
         "diario_as", "sofascore", "average", "statistics"
     ]
+    assert players_parameters["score_system"]["required"] is True
     assert "anyOf" not in players_parameters["team"]["schema"]
     assert "style" not in players_parameters["position"]
     assert "explode" not in players_parameters["position"]
@@ -131,6 +132,25 @@ def test_public_contract_has_all_stateless_operations_and_stable_query_parameter
     }
     assert matches_parameters["status"]["schema"]["enum"] == ["pending", "preview", "finished", "injuryTime"]
     assert "anyOf" not in matches_parameters["round_name"]["schema"]
+
+    player_parameters = {
+        parameter["name"]: parameter
+        for parameter in published["paths"]["/api/player/{player_id}"]["get"]["parameters"]
+    }
+    assert player_parameters["score_system"]["required"] is True
+
+    scoring_body_operations = {
+        "/api/optimize-lineup": "PublicOptimizeRequest",
+        "/api/suggest-alternatives": "SuggestAlternativesRequest",
+        "/api/pick-captain": "OptimizeRequest",
+        "/api/pick-ariete": "OptimizeRequest",
+        "/api/compare-players": "ComparePlayersRequest",
+    }
+    for path, component_name in scoring_body_operations.items():
+        operation = published["paths"][path]["post"]
+        body_schema = operation["requestBody"]["content"]["application/json"]["schema"]
+        assert body_schema["$ref"] == f"#/components/schemas/{component_name}"
+        assert "score_system" in published["components"]["schemas"][component_name]["required"]
 
 
 def test_rules_endpoint_exposes_example_rules_and_prizes():

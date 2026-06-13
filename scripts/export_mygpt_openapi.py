@@ -23,6 +23,16 @@ QUERY_PARAMETER_ENUMS = {
     ("matches", "status"): ["pending", "preview", "finished", "injuryTime"],
 }
 
+PUBLIC_SCORE_SYSTEM_OPERATIONS = {
+    "listPublicPlayers",
+    "getPublicPlayer",
+    "optimizePublicLineup",
+    "suggestPublicAlternatives",
+    "pickPublicCaptain",
+    "pickPublicAriete",
+    "comparePublicPlayers",
+}
+
 
 def normalize_action_parameters(schema: dict) -> None:
     for path, path_item in schema["paths"].items():
@@ -49,6 +59,34 @@ def normalize_action_parameters(schema: dict) -> None:
                 enum = QUERY_PARAMETER_ENUMS.get((resource, parameter.get("name")))
                 if enum:
                     parameter_schema["enum"] = enum
+
+
+def require_public_score_system(schema: dict) -> None:
+    """Make Actions ask for and send score_system on every scoring-dependent call."""
+    for path_item in schema["paths"].values():
+        for operation in path_item.values():
+            if not isinstance(operation, dict):
+                continue
+            if operation.get("operationId") not in PUBLIC_SCORE_SYSTEM_OPERATIONS:
+                continue
+
+            for parameter in operation.get("parameters", []):
+                if parameter.get("name") == "score_system":
+                    parameter["required"] = True
+
+            body_schema = (
+                operation.get("requestBody", {})
+                .get("content", {})
+                .get("application/json", {})
+                .get("schema", {})
+            )
+            ref = body_schema.get("$ref", "")
+            if ref.startswith("#/components/schemas/"):
+                component_name = ref.rsplit("/", 1)[-1]
+                component = schema["components"]["schemas"][component_name]
+                required = component.setdefault("required", [])
+                if "score_system" not in required:
+                    required.append("score_system")
 
 
 def build_contract() -> dict:
@@ -94,6 +132,7 @@ def build_public_readonly_contract() -> dict:
     schema["paths"] = public_paths
 
     normalize_action_parameters(schema)
+    require_public_score_system(schema)
     return schema
 
 
