@@ -7,6 +7,23 @@ from .rules import get_phase_rules, standings_warnings
 
 logger = logging.getLogger("Optimizer")
 
+PRICE_PRIOR_MAX = {
+    "GK": 50.0,
+    "DEF": 65.0,
+    "MID": 160.0,
+    "FWD": 170.0,
+}
+PRICE_PRIOR_MATCHES = 2.0
+
+
+def get_price_quality_prior(player: dict) -> float:
+    """Estimate per-match quality from the fixed-price tier when evidence is scarce."""
+    position = player.get("position")
+    max_price = PRICE_PRIOR_MAX.get(position, 170.0)
+    price = max(0.0, min(float(player.get("fixed_price") or 0), max_price))
+    quality_ratio = math.sqrt(price / max_price) if max_price else 0.0
+    return 3.0 + (9.0 * quality_ratio)
+
 
 def get_player_advanced_score(
     player: dict,
@@ -34,27 +51,40 @@ def get_player_advanced_score(
     if status in ("injured", "suspended", "no_disponible"):
         return -9999.0
 
-    # 2. Resolve Base points
-    # First: custom_ratings from request override
-    if custom_ratings and player_id in custom_ratings:
-        base_points = float(custom_ratings[player_id])
-    # Second: manual_rating from database
-    elif player.get("manual_rating") is not None:
-        base_points = float(player["manual_rating"])
-    # Third: default total points
-    else:
-        base_points = float(player.get("points", 0))
-
-    # Detailed reports are synchronized with SofaScore. Other official systems
-    # use their own aggregate total without mixing in SofaScore match form.
     scoring_reports = reports if score_system == "sofascore" else []
+    price_prior = get_price_quality_prior(player)
+
+    # 2. Resolve per-match base rating. Fixed price acts as a Bayesian prior
+    # while data is scarce; actual reports progressively replace that prior.
+    if custom_ratings and player_id in custom_ratings:
+        avg_pts = float(custom_ratings[player_id])
+    elif player.get("manual_rating") is not None:
+        avg_pts = float(player["manual_rating"])
+    else:
+        if scoring_reports:
+            observed_total = sum(float(report.get("points") or 0) for report in scoring_reports)
+            observed_matches = len(scoring_reports)
+            avg_pts = (
+                (PRICE_PRIOR_MATCHES * price_prior) + observed_total
+            ) / (PRICE_PRIOR_MATCHES + observed_matches)
+        else:
+            aggregate_points = float(player.get("points") or 0)
+            if aggregate_points > 0:
+                avg_pts = (
+                    (PRICE_PRIOR_MATCHES * price_prior) + aggregate_points
+                ) / (PRICE_PRIOR_MATCHES + 1.0)
+            else:
+                avg_pts = price_prior
+
     num_matches = len(scoring_reports)
-    avg_pts = base_points / max(1.0, num_matches) if num_matches > 0 else base_points
 
     # 3. Form Factor (average of last 3 matches)
     if num_matches > 0:
         recent_reports = sorted(scoring_reports, key=lambda x: x.get("date", 0), reverse=True)[:3]
-        form = sum(r.get("points", 0) for r in recent_reports) / len(recent_reports)
+        recent_total = sum(float(report.get("points") or 0) for report in recent_reports)
+        form = (
+            (PRICE_PRIOR_MATCHES * price_prior) + recent_total
+        ) / (PRICE_PRIOR_MATCHES + len(recent_reports))
     else:
         form = avg_pts
 
@@ -308,6 +338,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
     # 4. Objective: Maximize starter score and, when enabled, half-weight bench score.
     custom_ratings = getattr(request, "custom_ratings", None)
     player_scores = []
+    optimization_scores = []
     for p in players:
         p_reports = reports_map.get(p["id"], [])
         opponent = next_opponents.get(p["team"])
@@ -316,8 +347,17 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
             request.objective, custom_ratings, request.risk_profile, score_system
         )
         player_scores.append(score)
+        fixed_price_quality_bonus = (
+            0.01 * p["fixed_price"]
+            if request.objective == "points_and_value"
+            else 0.0
+        )
+        optimization_scores.append(score + fixed_price_quality_bonus)
         
-    prob += pulp.lpSum((player_scores[i] * s[i]) + (0.5 * player_scores[i] * b[i]) for i in player_indices), "Total_Squad_Score"
+    prob += pulp.lpSum(
+        (optimization_scores[i] * s[i]) + (0.5 * optimization_scores[i] * b[i])
+        for i in player_indices
+    ), "Total_Squad_Score"
     
     # 5. Global Roster Size Constraints
     prob += pulp.lpSum(s[i] for i in player_indices) == 11, "Starters_Count"

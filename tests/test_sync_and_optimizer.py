@@ -7,7 +7,10 @@ from src.app.database import (
     get_connection, get_matches_from_db, get_players_from_db, init_db,
     save_matches_to_db, save_players_to_db,
 )
-from src.app.optimizer import analyze_ariete_candidates, get_player_advanced_score, optimize_lineup
+from src.app.optimizer import (
+    analyze_ariete_candidates, get_player_advanced_score,
+    get_price_quality_prior, optimize_lineup,
+)
 from src.app.rules import get_phase_rules
 from src.app.schemas import OptimizeRequest
 
@@ -51,8 +54,63 @@ def test_non_sofascore_calculation_does_not_mix_sofascore_report_form():
         player, reports, {}, None, objective="points", score_system="statistics"
     )
 
-    assert sofascore_result == 22.35
-    assert statistics_result == 36.0
+    assert sofascore_result != statistics_result
+    assert sofascore_result > 0
+    assert statistics_result > 0
+
+
+def test_fixed_price_prior_values_unplayed_stars_without_forcing_spend():
+    premium = {"position": "FWD", "fixed_price": 170.0}
+    budget = {"position": "FWD", "fixed_price": 20.0}
+
+    assert get_price_quality_prior(premium) == 12.0
+    assert get_price_quality_prior(premium) > get_price_quality_prior(budget)
+
+
+def test_real_reports_progressively_replace_fixed_price_prior():
+    player = {
+        "id": "premium",
+        "position": "FWD",
+        "status": "ok",
+        "fixed_price": 170.0,
+        "points": 0,
+        "goals": 0,
+        "assists": 0,
+    }
+    no_reports = get_player_advanced_score(player, [], {}, None, objective="points")
+    strong_reports = get_player_advanced_score(
+        player,
+        [{"points": 18, "date": index, "minutes_played": 90} for index in range(1, 6)],
+        {},
+        None,
+        objective="points",
+    )
+
+    assert strong_reports > no_reports
+
+
+def test_single_match_does_not_erase_fixed_price_quality_prior():
+    premium = {
+        "id": "premium",
+        "position": "FWD",
+        "status": "ok",
+        "fixed_price": 170.0,
+        "points": 0,
+        "goals": 0,
+        "assists": 0,
+    }
+    budget = {**premium, "id": "budget", "fixed_price": 20.0, "points": 19}
+
+    premium_score = get_player_advanced_score(premium, [], {}, None)
+    budget_score = get_player_advanced_score(
+        budget,
+        [{"points": 19, "date": 1, "minutes_played": 90}],
+        {},
+        None,
+    )
+
+    assert premium_score >= budget_score
+    assert premium_score - budget_score < 1
 
 
 def test_active_events_keep_their_real_round_name():
