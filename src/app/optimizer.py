@@ -3,7 +3,7 @@ import pulp
 import math
 from .core import BiwengerCore, detect_current_round_and_phase, get_active_teams_for_round
 from .database import get_all_player_reports_from_db
-from .rules import get_phase_rules
+from .rules import get_phase_rules, standings_warnings
 
 logger = logging.getLogger("Optimizer")
 
@@ -358,7 +358,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
     ) >= 1, "Eligible_Captain"
     prob += pulp.lpSum(
         s[i] for i in player_indices
-        if players[i]["position"] in {"MID", "FWD"} and players[i]["fixed_price"] <= ariete_max
+        if players[i]["position"] == "FWD" and players[i]["fixed_price"] <= ariete_max
     ) >= 1, "Eligible_Ariete"
         
     # 6. Solve
@@ -410,7 +410,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
     ariete_candidates = [
         p for p in starters_chosen 
         if p["fixed_price"] <= ariete_max
-        and p["position"] in ("FWD", "MID")
+        and p["position"] == "FWD"
     ]
     
     # Sort candidates by composite score descending
@@ -425,6 +425,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
     expected_points = sum(p["points"] for p in starters_chosen)
     
     missing_reports = sum(1 for p in starters_chosen if not reports_map.get(p["id"]))
+    standings_review = standings_warnings(standings)
     explanation = [
         f"Successfully compiled optimal starting XI ({cfg['active_formation']})"
         + (f" and {substitute_count} substitutes" if substitute_count else " without substitutes")
@@ -433,6 +434,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
     ]
     if missing_reports:
         explanation.append(f"{missing_reports} starters have no saved match reports; review the recommendation before using it.")
+    explanation.extend(standings_review)
 
     return {
         "user_id": user_id,
@@ -456,7 +458,7 @@ async def optimize_lineup(core: BiwengerCore, user_id: str, request, override_se
             "captain_max_price": captain_max,
             "ariete_max_price": ariete_max,
         },
-        "needs_review": missing_reports > 0,
+        "needs_review": missing_reports > 0 or bool(standings_review),
         "explanation": explanation,
     }
 
@@ -488,6 +490,7 @@ async def analyze_captain_candidates(core: BiwengerCore, user_id: str, request) 
         
     standings = await core.get_standings()
     standings_map = {item["team_name"]: item for item in standings}
+    standings_review = standings_warnings(standings)
     
     matches = await core.get_matches(status="pending")
     next_opponents = {}
@@ -537,17 +540,19 @@ async def analyze_captain_candidates(core: BiwengerCore, user_id: str, request) 
             explanation.append(f"Option #{idx}: {p['name']} ({p['team']}) - Score: {c['score']} | Price: {p['fixed_price']}M")
     else:
         explanation.append("No valid captain candidates found.")
+    explanation.extend(standings_review)
         
     return {
         "score_system": score_system,
         "best_candidate": top_candidates[0]["player"] if top_candidates else None,
         "candidates": top_candidates,
+        "needs_review": bool(standings_review),
         "explanation": explanation
     }
 
 
 async def analyze_ariete_candidates(core: BiwengerCore, user_id: str, request) -> dict:
-    """Analyze and rank the top ariete candidates (price <= ARIETE_MAX_PRICE, position MID or FWD) from the database."""
+    """Analyze and rank forward-only ariete candidates within the phase price cap."""
     score_system = getattr(request, "score_system", "sofascore")
     players = await core.get_players(user_id, limit=10000, score_system=score_system)
     if not players:
@@ -573,6 +578,7 @@ async def analyze_ariete_candidates(core: BiwengerCore, user_id: str, request) -
         
     standings = await core.get_standings()
     standings_map = {item["team_name"]: item for item in standings}
+    standings_review = standings_warnings(standings)
     
     matches = await core.get_matches(status="pending")
     next_opponents = {}
@@ -590,8 +596,7 @@ async def analyze_ariete_candidates(core: BiwengerCore, user_id: str, request) -
     for p in players:
         if active_teams and p["team"] not in active_teams:
             continue
-        # Ariete must satisfy the phase price cap and play as MID or FWD.
-        if p["fixed_price"] > ariete_max or p["position"] not in ("FWD", "MID"):
+        if p["fixed_price"] > ariete_max or p["position"] != "FWD":
             continue
         status = str(p.get("status", "ok")).lower()
         if status in ("injured", "suspended", "no_disponible"):
@@ -623,11 +628,13 @@ async def analyze_ariete_candidates(core: BiwengerCore, user_id: str, request) -
             explanation.append(f"Option #{idx}: {p['name']} ({p['team']}) - Score: {c['score']} | Price: {p['fixed_price']}M")
     else:
         explanation.append("No valid ariete candidates found.")
+    explanation.extend(standings_review)
         
     return {
         "score_system": score_system,
         "best_candidate": top_candidates[0]["player"] if top_candidates else None,
         "candidates": top_candidates,
+        "needs_review": bool(standings_review),
         "explanation": explanation
     }
 
@@ -667,6 +674,7 @@ async def find_better_alternatives(core: BiwengerCore, user_id: str, request) ->
         
     standings = await core.get_standings()
     standings_map = {item["team_name"]: item for item in standings}
+    standings_review = standings_warnings(standings)
     
     matches = await core.get_matches(status="pending")
     next_opponents = {}
@@ -744,10 +752,12 @@ async def find_better_alternatives(core: BiwengerCore, user_id: str, request) ->
             )
     else:
         explanation.append(f"No better alternatives found for {target_player['name']} under {max_price:.1f}M.")
+    explanation.extend(standings_review)
         
     return {
         "score_system": score_system,
         "target_player": target_player,
         "alternatives": top_alts,
+        "needs_review": bool(standings_review),
         "explanation": explanation
     }

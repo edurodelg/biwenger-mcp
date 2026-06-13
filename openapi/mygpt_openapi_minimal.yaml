@@ -219,15 +219,13 @@ paths:
         schema:
           description: 'Filter by position: GK, DEF, MID, FWD'
           title: Position
-          type: string
           enum:
           - GK
           - DEF
           - MID
           - FWD
+          type: string
         description: 'Filter by position: GK, DEF, MID, FWD'
-        style: form
-        explode: true
       - name: team
         in: query
         required: false
@@ -236,24 +234,21 @@ paths:
           title: Team
           type: string
         description: Exact national-team filter value returned by GET /selections
-        style: form
-        explode: true
       - name: status
         in: query
         required: false
         schema:
-          description: 'Filter by availability status: ok, doubtful, injured'
+          description: Filter by availability status
           title: Status
-          type: string
           enum:
           - ok
           - doubtful
+          - warned
           - injured
           - suspended
           - no_disponible
-        description: 'Filter by availability status: ok, doubtful, injured'
-        style: form
-        explode: true
+          type: string
+        description: Filter by availability status
       - name: score_system
         in: query
         required: false
@@ -267,8 +262,6 @@ paths:
           - statistics
           type: string
         description: Uses the admin setting when omitted; values come from GET /scoring-systems
-        style: form
-        explode: true
       - name: sort_by
         in: query
         required: false
@@ -286,8 +279,6 @@ paths:
           - name
           - team
         description: 'Sort by: fixed_price, points, market_value, goals, assists'
-        style: form
-        explode: true
       - name: active_only
         in: query
         required: false
@@ -299,8 +290,6 @@ paths:
           title: Active Only
         description: Filter to show only players whose national teams are still active
           in the tournament
-        style: form
-        explode: true
       - name: limit
         in: query
         required: false
@@ -310,8 +299,6 @@ paths:
           minimum: 1
           default: 100
           title: Limit
-        style: form
-        explode: true
       - name: offset
         in: query
         required: false
@@ -320,8 +307,6 @@ paths:
           minimum: 0
           default: 0
           title: Offset
-        style: form
-        explode: true
       responses:
         '200':
           description: Successful Response
@@ -432,8 +417,6 @@ paths:
           - statistics
           type: string
         description: Uses the admin setting when omitted; values come from GET /scoring-systems
-        style: form
-        explode: true
       responses:
         '200':
           description: Successful Response
@@ -473,22 +456,19 @@ paths:
           title: Round Name
           type: string
         description: Filter by round name, e.g. 'Fase de Grupos, ronda 1'
-        style: form
-        explode: true
       - name: status
         in: query
         required: false
         schema:
-          description: 'Filter by status: pending, preview, finished'
+          description: Filter by match status
           title: Status
-          type: string
           enum:
           - pending
           - preview
           - finished
-        description: 'Filter by status: pending, preview, finished'
-        style: form
-        explode: true
+          - injuryTime
+          type: string
+        description: Filter by match status
       responses:
         '200':
           description: Successful Response
@@ -1431,9 +1411,17 @@ components:
         active_formation:
           anyOf:
           - type: string
+            enum:
+            - 3-4-3
+            - 3-5-2
+            - 4-3-3
+            - 4-4-2
+            - 4-5-1
+            - 5-3-2
+            - 5-4-1
           - type: 'null'
           title: Active Formation
-          description: Update formation (e.g. 3-5-2)
+          description: Update an allowed formation
         max_players_same_team:
           anyOf:
           - type: integer

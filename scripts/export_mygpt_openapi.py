@@ -17,10 +17,10 @@ OUTPUT = ROOT / "openapi" / "mygpt_openapi_minimal.yaml"
 
 QUERY_PARAMETER_ENUMS = {
     ("players", "position"): ["GK", "DEF", "MID", "FWD"],
-    ("players", "status"): ["ok", "doubtful", "injured", "suspended", "no_disponible"],
+    ("players", "status"): ["ok", "doubtful", "warned", "injured", "suspended", "no_disponible"],
     ("players", "score_system"): ["diario_as", "sofascore", "average", "statistics"],
     ("players", "sort_by"): ["fixed_price", "points", "market_value", "goals", "assists", "name", "team"],
-    ("matches", "status"): ["pending", "preview", "finished"],
+    ("matches", "status"): ["pending", "preview", "finished", "injuryTime"],
 }
 
 
@@ -39,8 +39,8 @@ def normalize_action_parameters(schema: dict) -> None:
                 if parameter.get("in") != "query":
                     continue
                 parameter["required"] = False
-                parameter["style"] = "form"
-                parameter["explode"] = True
+                parameter.pop("style", None)
+                parameter.pop("explode", None)
                 parameter_schema = parameter.get("schema", {})
                 any_of = parameter_schema.pop("anyOf", None)
                 if any_of:

@@ -3,8 +3,11 @@ from collections import Counter
 import pytest
 
 from src.app.core import core, matches_from_active_events, normalize_player_status
-from src.app.database import get_connection, init_db, save_players_to_db
-from src.app.optimizer import get_player_advanced_score, optimize_lineup
+from src.app.database import (
+    get_connection, get_matches_from_db, get_players_from_db, init_db,
+    save_matches_to_db, save_players_to_db,
+)
+from src.app.optimizer import analyze_ariete_candidates, get_player_advanced_score, optimize_lineup
 from src.app.rules import get_phase_rules
 from src.app.schemas import OptimizeRequest
 
@@ -105,7 +108,7 @@ async def test_optimizer_builds_valid_fixed_price_starting_xi():
     assert sum(p["fixed_price"] for p in squad) <= result["rule_checks"]["budget_limit"]
     assert result["captain"]["position"] != "GK"
     assert result["captain"]["fixed_price"] <= 70.0
-    assert result["ariete"]["position"] in {"MID", "FWD"}
+    assert result["ariete"]["position"] == "FWD"
     assert result["ariete"]["fixed_price"] <= 90.0
     assert result["needs_review"] is True
     assert result["rule_checks"]["squad_size"] == 11
@@ -147,6 +150,44 @@ async def test_optimizer_supports_every_squad_size(squad_size):
 async def test_invalid_formation_is_rejected():
     with pytest.raises(ValueError):
         await core.update_settings("alice", formation="invalid")
+    with pytest.raises(ValueError):
+        await core.update_settings("alice", formation="2-2-6")
+
+
+def test_player_filters_accept_all_supported_fields():
+    with get_connection() as conn:
+        conn.execute("UPDATE players SET team = 'España', status = 'warned' WHERE id = '1-GK'")
+        conn.commit()
+
+    assert get_players_from_db("alice", position="GK")
+    assert get_players_from_db("alice", team="espana")[0]["team"] == "España"
+    assert get_players_from_db("alice", status="WARNED")[0]["status"] == "warned"
+
+
+def test_match_filters_are_case_and_accent_insensitive():
+    save_matches_to_db([{
+        "id": 100,
+        "round_name": "Fase de Grupos, ronda 1",
+        "date": 1,
+        "status": "injuryTime",
+        "home_team_id": 1,
+        "home_team_name": "España",
+        "home_score": 1,
+        "away_team_id": 2,
+        "away_team_name": "México",
+        "away_score": 0,
+    }])
+
+    assert get_matches_from_db(status="injurytime")[0]["id"] == 100
+    assert get_matches_from_db(round_name="fase de grupos, ronda 1")[0]["id"] == 100
+
+
+@pytest.mark.asyncio
+async def test_ariete_candidates_are_forwards_only():
+    result = await analyze_ariete_candidates(core, "alice", OptimizeRequest())
+
+    assert result["candidates"]
+    assert all(candidate["player"]["position"] == "FWD" for candidate in result["candidates"])
 
 
 @pytest.mark.asyncio

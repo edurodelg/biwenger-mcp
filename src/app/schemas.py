@@ -2,6 +2,11 @@ from pydantic import BaseModel, Field
 from typing import Any, Literal
 from .scoring import ScoringSystem
 
+PlayerPosition = Literal["GK", "DEF", "MID", "FWD"]
+PlayerStatus = Literal["ok", "doubtful", "warned", "injured", "suspended", "no_disponible"]
+MatchStatus = Literal["pending", "preview", "finished", "injuryTime"]
+Formation = Literal["3-4-3", "3-5-2", "4-3-3", "4-4-2", "4-5-1", "5-3-2", "5-4-1"]
+
 class ApiResponse(BaseModel):
     ok: bool
     data: Any = None
@@ -77,7 +82,7 @@ class AcceptOfferActionRequest(BaseModel):
 
 class SettingsUpdateRequest(BaseModel):
     total_budget: float | None = Field(None, description="Update total budget in millions (e.g. 920.0)")
-    active_formation: str | None = Field(None, description="Update formation (e.g. 3-5-2)")
+    active_formation: Formation | None = Field(None, description="Update an allowed formation")
     max_players_same_team: int | None = Field(None, description="Update maximum players from same country")
     squad_size: int | None = Field(None, ge=11, le=15, description="Choose any squad size from 11 to 15")
     score_system: ScoringSystem | None = Field(None, description="Default scoring system for this admin workspace")
@@ -85,6 +90,6 @@ class SettingsUpdateRequest(BaseModel):
 
 class PublicOptimizeRequest(OptimizeRequest):
     budget: float | None = Field(None, description="Available budget in Millions (e.g. 920.0). Defaults to phase rules.")
-    formation: Literal["3-4-3", "3-5-2", "4-3-3", "4-4-2", "4-5-1", "5-3-2", "5-4-1"] = "3-5-2"
+    formation: Formation = "3-5-2"
     max_players_same_team: int | None = Field(None, description="Max players from same country. Defaults to phase rules.")
     squad_size: int = Field(11, ge=11, le=15, description="Squad size (11 to 15)")

@@ -16,7 +16,7 @@ from .database import (
     add_player_to_squad_db, remove_player_from_squad_db
 )
 from .pricing import fixed_price_from_record, normalize_price_millions
-from .rules import get_example_ruleset
+from .rules import ALLOWED_FORMATIONS, get_example_ruleset
 from .scoring import DEFAULT_SCORING_SYSTEM, SCORING_SYSTEMS, scoring_system_catalog
 
 
@@ -148,13 +148,10 @@ class BiwengerCore:
 
     def parse_formation(self, formation: str) -> tuple[int, int, int]:
         """Parse formation string (e.g. '4-4-2') to (DEF, MID, FWD) counts."""
-        try:
-            parts = [int(p) for p in formation.split("-")]
-            if len(parts) == 3 and sum(parts) == 10:
-                return parts[0], parts[1], parts[2]
-        except (AttributeError, TypeError, ValueError):
-            pass
-        raise ValueError("Invalid formation. Use DEF-MID-FWD with positive values summing to 10.")
+        if formation not in ALLOWED_FORMATIONS:
+            allowed = ", ".join(ALLOWED_FORMATIONS)
+            raise ValueError(f"Invalid formation. Allowed formations: {allowed}.")
+        return tuple(int(part) for part in formation.split("-"))
 
     async def get_settings(self, user_id: str) -> dict:
         """Get the active budget, formation, and team counts configuration."""

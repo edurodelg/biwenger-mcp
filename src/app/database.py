@@ -342,14 +342,14 @@ def get_players_from_db(
         sort_prefix = ""
     
     if position:
-        query += " AND position = ?"
+        query += f" AND {sort_prefix}position = ?"
         params.append(position.upper())
     if team:
-        query += " AND normalize_team(team) = ?"
+        query += f" AND normalize_team({sort_prefix}team) = ?"
         params.append(normalize_team_filter(team))
     if status:
-        query += " AND status = ?"
-        params.append(status.lower())
+        query += f" AND LOWER({sort_prefix}status) = LOWER(?)"
+        params.append(status)
         
     allowed_sort_fields = {"id", "name", "position", "team", "fixed_price", "market_value", "points", "status", "goals", "assists"}
     if sort_by not in allowed_sort_fields:
@@ -439,11 +439,11 @@ def get_matches_from_db(round_name: str = None, status: str = None) -> list[dict
     params = []
     
     if round_name:
-        query += " AND round_name = ?"
-        params.append(round_name)
+        query += " AND remove_accents(round_name) = ?"
+        params.append(remove_accents(round_name).strip())
     if status:
-        query += " AND status = ?"
-        params.append(status.lower())
+        query += " AND LOWER(status) = LOWER(?)"
+        params.append(status)
         
     query += " ORDER BY date ASC"
     

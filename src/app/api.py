@@ -5,10 +5,10 @@ from .schemas import (
     SettingsUpdateRequest, ComparePlayersRequest,
     BuildPhasePlanRequest, PlayerRatingUpdateRequest, SuggestAlternativesRequest,
     SetLineupActionRequest, MakeBidActionRequest, PlayerActionRequest,
-    AcceptOfferActionRequest,
+    AcceptOfferActionRequest, MatchStatus, PlayerPosition, PlayerStatus,
 )
 from .core import core
-from .rules import get_phase_rules
+from .rules import get_phase_rules, standings_warnings
 from .optimizer import (
     optimize_lineup, analyze_captain_candidates, 
     analyze_ariete_candidates, find_better_alternatives
@@ -111,9 +111,9 @@ async def sync_database_via_get(user_id: str):
 @router.get("/players", response_model=ApiResponse, operation_id="listPlayers")
 async def get_players(
     user_id: str,
-    position: str | None = Query(None, description="Filter by position: GK, DEF, MID, FWD"),
+    position: PlayerPosition | None = Query(None, description="Filter by position: GK, DEF, MID, FWD"),
     team: str | None = Query(None, description="Exact national-team filter value returned by GET /selections"),
-    status: str | None = Query(None, description="Filter by availability status: ok, doubtful, injured"),
+    status: PlayerStatus | None = Query(None, description="Filter by availability status"),
     score_system: ScoringSystem | None = Query(None, description="Uses the admin setting when omitted; values come from GET /scoring-systems"),
     sort_by: str = Query("fixed_price", description="Sort by: fixed_price, points, market_value, goals, assists"),
     active_only: bool = Query(True, description="Filter to show only players whose national teams are still active in the tournament"),
@@ -169,7 +169,7 @@ async def get_player(
 async def get_matches(
     user_id: str,
     round_name: str | None = Query(None, description="Filter by round name, e.g. 'Fase de Grupos, ronda 1'"),
-    status: str | None = Query(None, description="Filter by status: pending, preview, finished")
+    status: MatchStatus | None = Query(None, description="Filter by match status")
 ):
     """Fetch all match fixtures with optional round name or match status filtering."""
     matches = await core.get_matches(round_name=round_name, status=status)
@@ -179,9 +179,7 @@ async def get_matches(
 async def get_standings(user_id: str):
     """Retrieve group stage standings."""
     standings = await core.get_standings()
-    warnings = []
-    if 0 < len(standings) < 48:
-        warnings.append("Biwenger currently publishes only a partial group-stage table; missing groups are not inferred.")
+    warnings = standings_warnings(standings)
     return ApiResponse(ok=True, data=standings, warnings=warnings, needs_review=bool(warnings))
 
 @router.get("/leagues", response_model=ApiResponse, operation_id="listLeagues")
@@ -288,7 +286,7 @@ async def pick_captain(user_id: str, req: OptimizeRequest):
     return ApiResponse(
         ok=True, 
         data=data, 
-        needs_review=data.get("best_candidate") is None,
+        needs_review=data.get("best_candidate") is None or bool(data.get("needs_review")),
         warnings=data.get("explanation", [])
     )
 
@@ -300,7 +298,7 @@ async def pick_ariete(user_id: str, req: OptimizeRequest):
     return ApiResponse(
         ok=True, 
         data=data, 
-        needs_review=data.get("best_candidate") is None,
+        needs_review=data.get("best_candidate") is None or bool(data.get("needs_review")),
         warnings=data.get("explanation", [])
     )
 
@@ -312,7 +310,7 @@ async def suggest_alternatives(user_id: str, req: SuggestAlternativesRequest):
     return ApiResponse(
         ok=True,
         data=data,
-        needs_review=data.get("target_player") is None,
+        needs_review=data.get("target_player") is None or bool(data.get("needs_review")),
         warnings=data.get("explanation", [])
     )
 
@@ -423,9 +421,9 @@ async def public_rules():
 
 @public_router.get("/players", response_model=ApiResponse, operation_id="listPublicPlayers")
 async def get_public_players(
-    position: str | None = Query(None, description="Filter by position: GK, DEF, MID, FWD"),
+    position: PlayerPosition | None = Query(None, description="Filter by position: GK, DEF, MID, FWD"),
     team: str | None = Query(None, description="Exact national-team filter value returned by GET /api/selections"),
-    status: str | None = Query(None, description="Filter by availability status: ok, doubtful, injured"),
+    status: PlayerStatus | None = Query(None, description="Filter by availability status"),
     score_system: ScoringSystem | None = Query(None, description="Required; values come from GET /api/scoring-systems"),
     sort_by: str = Query("fixed_price", description="Sort by: fixed_price, points, market_value, goals, assists"),
     active_only: bool = Query(True, description="Filter to show only players whose national teams are still active in the tournament"),
@@ -485,7 +483,7 @@ async def get_public_player(
 @public_router.get("/matches", response_model=ApiResponse, operation_id="listPublicMatches")
 async def get_public_matches(
     round_name: str | None = Query(None, description="Filter by round name, e.g. 'Fase de Grupos, ronda 1'"),
-    status: str | None = Query(None, description="Filter by status: pending, preview, finished")
+    status: MatchStatus | None = Query(None, description="Filter by match status")
 ):
     """Fetch all match fixtures with optional round name or match status filtering."""
     matches = await core.get_matches(round_name=round_name, status=status)
@@ -496,9 +494,7 @@ async def get_public_matches(
 async def get_public_standings():
     """Retrieve group stage standings."""
     standings = await core.get_standings()
-    warnings = []
-    if 0 < len(standings) < 48:
-        warnings.append("Biwenger currently publishes only a partial group-stage table; missing groups are not inferred.")
+    warnings = standings_warnings(standings)
     return ApiResponse(ok=True, data=standings, warnings=warnings, needs_review=bool(warnings))
 
 
@@ -555,7 +551,7 @@ async def public_suggest_alternatives(req: SuggestAlternativesRequest):
     return ApiResponse(
         ok=True,
         data=data,
-        needs_review=data.get("target_player") is None,
+        needs_review=data.get("target_player") is None or bool(data.get("needs_review")),
         warnings=data.get("explanation", [])
     )
 
@@ -570,7 +566,7 @@ async def public_pick_captain(req: OptimizeRequest):
     return ApiResponse(
         ok=True,
         data=data,
-        needs_review=data.get("best_candidate") is None,
+        needs_review=data.get("best_candidate") is None or bool(data.get("needs_review")),
         warnings=data.get("explanation", [])
     )
 
@@ -585,7 +581,7 @@ async def public_pick_ariete(req: OptimizeRequest):
     return ApiResponse(
         ok=True,
         data=data,
-        needs_review=data.get("best_candidate") is None,
+        needs_review=data.get("best_candidate") is None or bool(data.get("needs_review")),
         warnings=data.get("explanation", [])
     )
 

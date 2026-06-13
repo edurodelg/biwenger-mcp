@@ -16,7 +16,7 @@ from .optimizer import (
     analyze_ariete_candidates, find_better_alternatives
 )
 from .security import ensure_write_allowed, lineup_confirmation_token, require_confirmation
-from .rules import get_phase_rules
+from .rules import get_phase_rules, standings_warnings
 
 try:
     from fastmcp import FastMCP
@@ -70,7 +70,9 @@ async def biwenger_get_market(user_id: str | None = None) -> dict:
 
 @mcp.tool()
 async def biwenger_get_standings(user_id: str | None = None) -> dict:
-    return {"ok": True, "data": await core.get_standings()}
+    standings = await core.get_standings()
+    warnings = standings_warnings(standings)
+    return {"ok": True, "data": standings, "warnings": warnings, "needs_review": bool(warnings)}
 
 
 @mcp.tool()
@@ -161,7 +163,7 @@ async def biwenger_pick_captain(
     score_system = score_system or (await core.get_settings(user_id))["score_system"]
     req = OptimizeRequest(phase=phase, matchday=matchday, risk_profile=risk_profile, score_system=score_system)
     data = await analyze_captain_candidates(core, user_id, req)
-    return {"ok": True, "data": data, "needs_review": data.get("best_candidate") is None}
+    return {"ok": True, "data": data, "needs_review": data.get("best_candidate") is None or bool(data.get("needs_review"))}
 
 
 @mcp.tool()
@@ -176,7 +178,7 @@ async def biwenger_pick_ariete(
     score_system = score_system or (await core.get_settings(user_id))["score_system"]
     req = OptimizeRequest(phase=phase, matchday=matchday, risk_profile=risk_profile, score_system=score_system)
     data = await analyze_ariete_candidates(core, user_id, req)
-    return {"ok": True, "data": data, "needs_review": data.get("best_candidate") is None}
+    return {"ok": True, "data": data, "needs_review": data.get("best_candidate") is None or bool(data.get("needs_review"))}
 
 
 @mcp.tool()

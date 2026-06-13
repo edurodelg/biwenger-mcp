@@ -2,6 +2,15 @@ from .config import settings
 
 
 PHASES = ("groups", "round_of_16", "quarter_finals", "semi_finals", "final")
+ALLOWED_FORMATIONS = ("3-4-3", "3-5-2", "4-3-3", "4-4-2", "4-5-1", "5-3-2", "5-4-1")
+PARTIAL_STANDINGS_WARNING = (
+    "Biwenger currently publishes only a partial group-stage table; "
+    "missing groups are not inferred. Recommendations using standings require review."
+)
+
+
+def standings_warnings(standings: list[dict]) -> list[str]:
+    return [PARTIAL_STANDINGS_WARNING] if 0 < len(standings) < 48 else []
 
 
 def _millions(value: int | float) -> float:

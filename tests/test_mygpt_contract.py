@@ -82,8 +82,10 @@ def test_mygpt_contract_is_exact_export_of_fastapi():
         parameter["name"]: parameter
         for parameter in published["paths"]["/api/users/{user_id}/matches"]["get"]["parameters"]
     }
-    assert matches_parameters["status"]["schema"]["enum"] == ["pending", "preview", "finished"]
+    assert matches_parameters["status"]["schema"]["enum"] == ["pending", "preview", "finished", "injuryTime"]
     assert "anyOf" not in matches_parameters["round_name"]["schema"]
+    assert "style" not in matches_parameters["status"]
+    assert "explode" not in matches_parameters["status"]
 
 
 def test_public_contract_has_all_stateless_operations_and_stable_query_parameters():
@@ -115,17 +117,19 @@ def test_public_contract_has_all_stateless_operations_and_stable_query_parameter
         for parameter in published["paths"]["/api/players"]["get"]["parameters"]
     }
     assert players_parameters["position"]["schema"]["enum"] == ["GK", "DEF", "MID", "FWD"]
-    assert players_parameters["status"]["schema"]["enum"][:3] == ["ok", "doubtful", "injured"]
+    assert players_parameters["status"]["schema"]["enum"][:3] == ["ok", "doubtful", "warned"]
     assert players_parameters["score_system"]["schema"]["enum"] == [
         "diario_as", "sofascore", "average", "statistics"
     ]
     assert "anyOf" not in players_parameters["team"]["schema"]
+    assert "style" not in players_parameters["position"]
+    assert "explode" not in players_parameters["position"]
 
     matches_parameters = {
         parameter["name"]: parameter
         for parameter in published["paths"]["/api/matches"]["get"]["parameters"]
     }
-    assert matches_parameters["status"]["schema"]["enum"] == ["pending", "preview", "finished"]
+    assert matches_parameters["status"]["schema"]["enum"] == ["pending", "preview", "finished", "injuryTime"]
     assert "anyOf" not in matches_parameters["round_name"]["schema"]
 
 
